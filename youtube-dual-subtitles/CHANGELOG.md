@@ -4,6 +4,16 @@ Toàn bộ các thay đổi đáng chú ý của dự án **YouTube Dual Subtitl
 
 ---
 
+## [1.2.6] - 2026-10-10
+
+### 🛠️ Sửa delay hiển thị & Hạ ưu tiên SRT (Fixed subtitle delay & SRT lowest priority)
+- **Xác minh SRT vô tội:** `downloadBilingualSrt()` vốn đã on-demand 100% (chỉ chạy trong `srtBtn.onclick`), không hề tham gia render/prefetch/interceptor. Bản này gắn nhãn chính thức `LOWEST PRIORITY (ON-DEMAND ONLY)` để khóa hành vi, tránh tái phạm.
+- **Render loop O(1)/O(log n):** thay linear scan `O(n)` mỗi frame bằng `findActiveCueIndex()` (hint cue trước + binary search trên cues đã sort, kèm check overlap ±2). Overlay khớp giờ video chính xác hơn, hết trễ dần ở video dài/nhiều cues; `overlayThrottleMs` 80 → 50ms.
+- **Câu gốc hiện ngay:** `onVideoChange()` bắn fallback lần đầu `force=true` tức thì (không chờ 400ms), các retry 400/1200/2500ms đi qua throttle 1500ms chống spam request. Toggle `CC²`, `Alt+D`, sự kiện `play` cũng force nạp ngay.
+- **Ghi rõ thứ tự tốc độ:** interceptor (CC YouTube bật, 0ms) > fallback force (lần đầu) > fallback throttle. Muốn nhanh nhất: bật CC YouTube 1 lần để interceptor bắt `timedtext` gốc.
+
+---
+
 ## [1.2.3] - 2026-10-10
 
 ### 🛠️ Sửa lỗi & Gọn Modal (Fixed & Compact Settings)

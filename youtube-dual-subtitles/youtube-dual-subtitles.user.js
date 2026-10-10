@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Dual Subtitles Pro
 // @namespace    https://www.narga.net/
-// @version      1.2.5
+// @version      1.2.6
 // @description  Hiển thị phụ đề song ngữ (Dual Subtitles) chuẩn xác trên YouTube với DeepL API (Tùy chỉnh vị trí, font, màu sắc & ngôn ngữ)
 // @author       narga
 // @homepageURL  https://www.narga.net/
@@ -23,7 +23,7 @@
 (function () {
   'use strict';
 
-  console.log('[YT-DualSub] Khởi động YouTube Dual Subtitles Pro v1.2.5 (DeepL Engine)...');
+  console.log('[YT-DualSub] Khởi động YouTube Dual Subtitles Pro v1.2.6 (DeepL Engine)...');
 
   // =========================================================================
   // 1. CẤU HÌNH HỆ THỐNG (PIPELINE CONFIGURATION)
@@ -42,7 +42,7 @@
 
     prefetchLeadSeconds: 12,
     maxCacheEntries: 500,
-    overlayThrottleMs: 80,
+    overlayThrottleMs: 50,
 
     // 5 ngôn ngữ đích cốt lõi
     supportedLanguages: [
@@ -589,6 +589,13 @@
     return `${videoId}:${sourceLang}:${targetLang}:${cue.tStartMs}:${safeText}`;
   }
 
+  // =========================================================================
+  // SRT SONG NGỮ — ƯU TIÊN THẤP NHẤT (LOWEST PRIORITY, ON-DEMAND ONLY)
+  // -------------------------------------------------------------------------
+  // CHỈ chạy khi user bấm nút "Tải SRT" trong modal. TUYỆT ĐỐI KHÔNG được gọi
+  // trong render loop / interceptor / prefetch / fallback (tránh gây delay
+  // hiển thị phụ đề). Đọc trực tiếp cues + translatedMap sẵn có, không fetch.
+  // =========================================================================
   // ponytail: xuất SRT song ngữ từ dữ liệu sẵn có (cues + translatedMap), không thêm dependency
   function toSrtTime(ms) {
     const t = Math.max(0, Math.round(ms));
@@ -708,9 +715,50 @@
     }
   }
 
+  // Tìm cue đang active: ưu tiên hint O(1) (cue frame trước còn hiệu lực),
+  // ngược lại binary search O(log n) vì cues đã sort theo tStartMs.
+  // Thay linear scan O(n) mỗi frame -> overlay khớp giờ video chính xác hơn,
+  // không trễ dần khi video dài / nhiều cues.
+  function findActiveCueIndex(cues, currentMs, hintIndex) {
+    const n = cues.length;
+    if (!n) return -1;
+    if (Number.isInteger(hintIndex) && hintIndex >= 0 && hintIndex < n) {
+      const h = cues[hintIndex];
+      if (currentMs >= h.tStartMs && currentMs < h.tStartMs + h.dDurationMs) return hintIndex;
+    }
+    let lo = 0, hi = n - 1, ans = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (cues[mid].tStartMs <= currentMs) { ans = mid; lo = mid + 1; }
+      else hi = mid - 1;
+    }
+    if (ans !== -1) {
+      const c = cues[ans];
+      if (currentMs < c.tStartMs + c.dDurationMs) return ans;
+      // Overlap nhẹ (mergeGap âm): cue ngay trước đó có thể vẫn còn hiệu lực
+      for (let k = ans - 1; k >= Math.max(0, ans - 2); k--) {
+        const p = cues[k];
+        if (currentMs >= p.tStartMs && currentMs < p.tStartMs + p.dDurationMs) return k;
+      }
+    }
+    return -1;
+  }
+
+  // Fallback tải captionTrack: đường CHẬM (thêm 1 round-trip GM_xhr).
+  // Đường NHANH nhất vẫn là interceptor (bắt ngay request timedtext của
+  // YouTube khi CC đang bật). Vì vậy fallback bị throttle để không spam
+  // request mỗi giây trong lúc chờ — chỉ cho chạy tối đa 1 lần / 1500ms,
+  // trừ các lần gọi thủ công (force=true: đổi video, bấm play, bật script).
+  const FALLBACK = { lastAttemptMs: 0, minIntervalMs: 1500 };
+
   // Fallback đọc captionTracks từ player API theo đúng thứ tự ưu tiên
-  function checkPlayerCaptionsFallback() {
+  function checkPlayerCaptionsFallback(force) {
     if (STATE.cues.length > 0) return;
+    if (!force) {
+      const now = Date.now();
+      if (now - FALLBACK.lastAttemptMs < FALLBACK.minIntervalMs) return;
+    }
+    FALLBACK.lastAttemptMs = Date.now();
 
     try {
       const player = document.getElementById('movie_player') || pageWindow.movie_player;
@@ -949,14 +997,8 @@
 
       const currentMs = Math.round(video.currentTime * 1000);
 
-      let activeIndex = -1;
-      for (let i = 0; i < STATE.cues.length; i++) {
-        const c = STATE.cues[i];
-        if (currentMs >= c.tStartMs && currentMs < (c.tStartMs + c.dDurationMs)) {
-          activeIndex = i;
-          break;
-        }
-      }
+      // O(1) khi đứng yên 1 câu, O(log n) khi chuyển câu — không block frame
+      const activeIndex = findActiveCueIndex(STATE.cues, currentMs, this.lastActiveIndex);
 
       if (activeIndex === -1) {
         this.origSubtitleEl.textContent = '';
@@ -1094,7 +1136,7 @@
         promptForApiKey();
       }
       if (STATE.enabled && STATE.cues.length === 0) {
-        checkPlayerCaptionsFallback();
+        checkPlayerCaptionsFallback(true);
       }
     };
 
@@ -1877,7 +1919,7 @@
       updateChannelButtonState();
       console.log(`[YT-DualSub] Phím tắt Alt+D: Song ngữ ${STATE.enabled ? 'BẬT' : 'TẮT'}`);
       if (STATE.enabled && STATE.cues.length === 0) {
-        checkPlayerCaptionsFallback();
+        checkPlayerCaptionsFallback(true);
       }
     }
   });
@@ -1902,10 +1944,13 @@
       renderer.init(playerEl);
     }
 
-    // Tự động tải captionTrack liên tục cho tới khi nhận được phụ đề
-    setTimeout(checkPlayerCaptionsFallback, 400);
-    setTimeout(checkPlayerCaptionsFallback, 1200);
-    setTimeout(checkPlayerCaptionsFallback, 2500);
+    // Tự động tải captionTrack: bắn ngay 1 lần (force) để hiện gốc sớm nhất,
+    // các retry sau đi qua throttle chống spam. Đường nhanh nhất vẫn là
+    // interceptor khi YouTube CC đang bật (0ms, không tốn thêm request).
+    checkPlayerCaptionsFallback(true);
+    setTimeout(() => checkPlayerCaptionsFallback(false), 400);
+    setTimeout(() => checkPlayerCaptionsFallback(false), 1200);
+    setTimeout(() => checkPlayerCaptionsFallback(false), 2500);
 
     setTimeout(injectChannelControls, 300);
     setTimeout(injectChannelControls, 1000);
@@ -1938,7 +1983,7 @@
   // Gắn listener lắng nghe video play để đảm bảo phụ đề nạp ngay khi bấm Play
   document.addEventListener('play', () => {
     if (STATE.enabled && STATE.cues.length === 0) {
-      checkPlayerCaptionsFallback();
+      checkPlayerCaptionsFallback(true);
     }
   }, true);
 
