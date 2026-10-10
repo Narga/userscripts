@@ -1,11 +1,13 @@
 // ==UserScript==
 // @name         YouTube Dual Subtitles Pro
 // @namespace    https://www.narga.net/
-// @version      1.2.4
-// @description  Hiển thị phụ đề song ngữ (Dual Subtitles) chuẩn xác trên YouTube với DeepL API (VI, EN, DE, SK, CS - Tùy chỉnh vị trí, font, màu sắc & Chống 429)
+// @version      1.2.5
+// @description  Hiển thị phụ đề song ngữ (Dual Subtitles) chuẩn xác trên YouTube với DeepL API (Tùy chỉnh vị trí, font, màu sắc & ngôn ngữ)
 // @author       narga
 // @homepageURL  https://www.narga.net/
 // @supportURL   https://www.narga.net/
+// @downloadURL  https://raw.githubusercontent.com/Narga/userscripts/refs/heads/main/youtube-dual-subtitles/youtube-dual-subtitles.user.js
+// @updateURL    https://raw.githubusercontent.com/Narga/userscripts/refs/heads/main/youtube-dual-subtitles/youtube-dual-subtitles.user.js
 // @match        *://*.youtube.com/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
@@ -21,7 +23,7 @@
 (function () {
   'use strict';
 
-  console.log('[YT-DualSub] Khởi động YouTube Dual Subtitles Pro v1.2.4 (DeepL Engine)...');
+  console.log('[YT-DualSub] Khởi động YouTube Dual Subtitles Pro v1.2.5 (DeepL Engine)...');
 
   // =========================================================================
   // 1. CẤU HÌNH HỆ THỐNG (PIPELINE CONFIGURATION)
