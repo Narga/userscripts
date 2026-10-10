@@ -4,6 +4,23 @@ Toàn bộ các thay đổi đáng chú ý của dự án **YouTube Dual Subtitl
 
 ---
 
+## [1.2.3] - 2026-10-10
+
+### 🛠️ Sửa lỗi & Gọn Modal (Fixed & Compact Settings)
+- **DeepL Key persist dual-store + input inline:** `set/getDeepLApiKey` mirror `GM_setValue` + `localStorage` (đọc GM trước, fallback localStorage); modal thêm ô input password + nút Lưu (Enter để lưu), khắc phục `prompt()` bị chặn/không thấy persist.
+- **Ngôn ngữ đích dạng dropdown:** thay danh sách 5 hàng chiếm diện tích bằng `<select>` gọn 1 dòng.
+- **Font mặc định 28px + input số:** thay 4 nút cứng bằng `<input type="number" min="10" max="48">`, clamp + apply real-time.
+- **Màu CSS tùy ý:** giữ 5 màu preset, thêm `<input type="color">` + ô text (hex/tên màu/rgb), validate qua `CSS.supports`-tương đương (`new Option().style`), sync 2 chiều.
+
+---
+
+## [1.2.4] - 2026-10-10
+
+### 📥 Tính năng Mới (Added)
+- **Tải SRT song ngữ:** nút 💾 trong footer modal xuất `.srt` (câu gốc + câu dịch, BOM UTF-8, tên file theo tiêu đề video + mã ngôn ngữ). Câu chưa dịch chỉ xuất câu gốc, không bao giờ ghi câu gốc giả làm bản dịch.
+
+---
+
 ## [1.2.2] - 2026-10-10
 
 ### 🚀 Nâng cấp & Hoàn thiện Trải nghiệm (UX Improvements & Centered Modal)

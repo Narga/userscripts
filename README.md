@@ -2,7 +2,7 @@
 
 > **Userscript hiển thị phụ đề song ngữ thông minh, mượt mà trên YouTube với DeepL API.**  
 > Tác giả: **narga** — [https://www.narga.net/](https://www.narga.net/)  
-> Phiên bản: **v1.2.2**  
+> Phiên bản: **v1.2.4**  
 > Mã nguồn script: [`userscripts/youtube-dual-subtitles.user.js`](file:///Users/narga/Briefcase/Projects/dual-subtitles/userscripts/youtube-dual-subtitles.user.js)
 
 ---
@@ -26,12 +26,22 @@ Khác biệt với các extension và userscript truyền thống thường dùn
   - 🇸🇰 **Slovenčina (`SK`)**
   - 🇨🇿 **Čeština (`CS`)**
 - **Hỗ trợ cả DeepL Free và Pro:** Tự động nhận diện khóa Free (hậu tố `:fx`) hoặc Pro, cho phép người dùng tùy chọn endpoint (Auto / Free / Pro).
+- **Tải SRT song ngữ:** nút 💾 trong footer bảng cài đặt xuất file `.srt` (câu gốc + câu dịch, câu chưa dịch chỉ có câu gốc).
+
+> **➕ Tự thêm ngôn ngữ đích:** rất dễ, chỉ thêm **1 dòng** vào mảng `CONFIG.supportedLanguages` trong
+> `userscripts/youtube-dual-subtitles.user.js` (không cần sửa logic nào khác, dropdown tự cập nhật):
+> ```js
+> { code: 'fr', name: 'Français', deeplCode: 'FR' },
+> ```
+> - `code`: mã nội bộ (viết thường, duy nhất).
+> - `name`: tên hiển thị trong dropdown.
+> - `deeplCode`: mã DeepL `target_lang` (xem [DeepL docs — Target languages](https://developers.deepl.com/docs/resources/supported-languages#target-languages)): `FR`, `JA`, `ZH`, `KO`, `ES`, `IT`, `EN-GB`... Lưu ý `EN` chung không hợp lệ, phải dùng `EN-US`/`EN-GB`.
 
 ### 2. Tùy biến Hiển thị & Chống Loãng Video
 - **Đưa câu gốc lên đỉnh video (Top position):** Tách câu gốc tiếng Anh lên mép trên màn hình, giữ dòng dịch tiếng Việt ở đáy màn hình. Phù hợp khi bạn muốn xem phim/nội dung mà không muốn bị hai dòng phụ đề đè lên nhau gây rối mắt.
 - **Tắt phụ đề gốc:** Chế độ xem thuần bản dịch — ẩn hoàn toàn câu gốc tiếng Anh, chỉ hiển thị dòng dịch tiếng Việt.
-- **Tăng giảm cỡ chữ:** 4 mức kích thước linh hoạt: `16px` (Nhỏ), `20px` (Chuẩn), `24px` (Lớn), `28px` (Rất lớn).
-- **5 Bảng màu phụ đề sắc nét:**
+- **Tăng giảm cỡ chữ:** mặc định `28px`, nhập giá trị tự do `10–48px` qua ô input.
+- **5 Bảng màu phụ đề sắc nét + màu CSS tùy ý:**
   - 🟡 **Vàng nhạt (`#fef08a`)** — *Mặc định chuẩn cinema*
   - ⚪ **Trắng sáng (`#ffffff`)**
   - 🟢 **Xanh lục nhạt (`#86efac`)**

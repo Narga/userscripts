@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Dual Subtitles Pro
 // @namespace    https://www.narga.net/
-// @version      1.2.2
+// @version      1.2.4
 // @description  Hiển thị phụ đề song ngữ (Dual Subtitles) chuẩn xác trên YouTube với DeepL API (VI, EN, DE, SK, CS - Tùy chỉnh vị trí, font, màu sắc & Chống 429)
 // @author       narga
 // @homepageURL  https://www.narga.net/
@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-  console.log('[YT-DualSub] Khởi động YouTube Dual Subtitles Pro v1.2.2 (DeepL Engine)...');
+  console.log('[YT-DualSub] Khởi động YouTube Dual Subtitles Pro v1.2.4 (DeepL Engine)...');
 
   // =========================================================================
   // 1. CẤU HÌNH HỆ THỐNG (PIPELINE CONFIGURATION)
@@ -63,13 +63,37 @@
 
   const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
 
-  // Tiện ích quản lý DeepL API Key
+  // Tiện ích quản lý DeepL API Key (dual-store: GM + localStorage để luôn persist)
   function getDeepLApiKey() {
-    return (GM_getValue('yt_dualsub_deepl_key', '') || '').trim();
+    try {
+      const v = (GM_getValue('yt_dualsub_deepl_key', '') || '').trim();
+      if (v) return v;
+    } catch (e) {}
+    try {
+      return (localStorage.getItem('yt_dualsub_deepl_key') || '').trim();
+    } catch (e) {
+      return '';
+    }
   }
 
   function setDeepLApiKey(key) {
-    GM_setValue('yt_dualsub_deepl_key', (key || '').trim());
+    const v = (key || '').trim();
+    try {
+      GM_setValue('yt_dualsub_deepl_key', v);
+    } catch (e) {}
+    // ponytail: mirror sang localStorage để key存 trong localdb, đọc được khi GM bị chặn
+    try {
+      if (v) localStorage.setItem('yt_dualsub_deepl_key', v);
+      else localStorage.removeItem('yt_dualsub_deepl_key');
+    } catch (e) {}
+  }
+
+  function isValidCssColor(s) {
+    if (!s || typeof s !== 'string') return false;
+    const o = new Option().style;
+    o.color = '';
+    o.color = s.trim();
+    return !!o.color;
   }
 
   function getInitialTargetLang() {
@@ -84,7 +108,7 @@
     targetLang: getInitialTargetLang(),
     showOriginal: GM_getValue('yt_dualsub_show_original', true),
     originalPosition: GM_getValue('yt_dualsub_orig_pos', 'bottom'), // 'bottom' (Stacked) | 'top' (Đỉnh video)
-    fontSize: GM_getValue('yt_dualsub_font_size', 20), // 16, 20, 24, 28
+    fontSize: GM_getValue('yt_dualsub_font_size', 28), // mặc định 28px, chỉnh qua input
     transColor: GM_getValue('yt_dualsub_trans_color', '#fef08a'),
     deeplApiType: GM_getValue('yt_dualsub_deepl_type', 'auto'), // 'auto' | 'free' | 'pro'
     currentVideoId: '',
@@ -561,6 +585,38 @@
   function makeCacheKey(videoId, sourceLang, targetLang, cue) {
     const safeText = cue.text.slice(0, 32).replace(/[\s:]+/g, '_');
     return `${videoId}:${sourceLang}:${targetLang}:${cue.tStartMs}:${safeText}`;
+  }
+
+  // ponytail: xuất SRT song ngữ từ dữ liệu sẵn có (cues + translatedMap), không thêm dependency
+  function toSrtTime(ms) {
+    const t = Math.max(0, Math.round(ms));
+    const h = String(Math.floor(t / 3600000)).padStart(2, '0');
+    const m = String(Math.floor((t % 3600000) / 60000)).padStart(2, '0');
+    const s = String(Math.floor((t % 60000) / 1000)).padStart(2, '0');
+    const z = String(t % 1000).padStart(3, '0');
+    return `${h}:${m}:${s},${z}`;
+  }
+
+  function downloadBilingualSrt() {
+    if (!STATE.cues.length) return false;
+    let out = '';
+    for (let i = 0; i < STATE.cues.length; i++) {
+      const cue = STATE.cues[i];
+      const key = makeCacheKey(STATE.currentVideoId, STATE.sourceLang, STATE.targetLang, cue);
+      const trans = STATE.translatedMap.get(key);
+      out += `${i + 1}\n${toSrtTime(cue.tStartMs)} --> ${toSrtTime(cue.tStartMs + cue.dDurationMs)}\n${cue.text}\n`;
+      if (trans) out += `${trans}\n`;
+      out += '\n';
+    }
+    const blob = new Blob(['\ufeff' + out], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const base = (document.title || STATE.currentVideoId || 'subtitles').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 80);
+    a.download = `${base}.${STATE.targetLang}.srt`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    return true;
   }
 
   // =========================================================================
@@ -1328,63 +1384,40 @@
     langSectionTitle.style.cssText = `font-size:11px; font-weight:700; color:${isDark ? '#9ca3af' : '#6b7280'}; margin-bottom:8px; letter-spacing:0.5px;`;
     langSection.appendChild(langSectionTitle);
 
-    const langGrid = document.createElement('div');
-    langGrid.style.cssText = 'display:flex; flex-direction:column; gap:4px;';
-
-    const langRows = [];
-    function refreshLangSelection() {
-      langRows.forEach(({ row, check, lang }) => {
-        const active = lang.code === STATE.targetLang;
-        row.style.background = active
-          ? (isDark ? 'rgba(254, 240, 138, 0.18)' : 'rgba(202, 138, 4, 0.14)')
-          : (isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)');
-        row.style.color = active
-          ? (isDark ? '#fef08a' : '#ca8a04')
-          : (isDark ? '#e5e7eb' : '#374151');
-        row.style.fontWeight = active ? '700' : '500';
-        check.style.display = active ? 'inline-block' : 'none';
-      });
-    }
+    const langSelect = document.createElement('select');
+    langSelect.style.cssText = `
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      background: ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'};
+      color: ${isDark ? '#fef08a' : '#0f0f0f'};
+      border: 1px solid ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'};
+      outline: none;
+      box-sizing: border-box;
+    `;
 
     for (const lang of CONFIG.supportedLanguages) {
-      const langRow = document.createElement('div');
-      langRow.style.cssText = `
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 8px 12px;
-        border-radius: 8px;
-        font-size: 13px;
-        cursor: pointer;
-        transition: background 0.15s;
-        user-select: none;
-      `;
-      const nameSpan = document.createElement('span');
-      nameSpan.textContent = lang.name;
-      langRow.appendChild(nameSpan);
-
-      const check = document.createElement('span');
-      check.textContent = '✓';
-      check.style.cssText = `font-weight:700; margin-left:8px; color:${isDark ? '#fef08a' : '#ca8a04'};`;
-      langRow.appendChild(check);
-
-      langRow.onclick = () => {
-        if (lang.code !== STATE.targetLang) {
-          STATE.targetLang = lang.code;
-          GM_setValue('yt_dualsub_target_lang', lang.code);
-          translator.resetSession();
-          STATE.translatedMap.clear();
-          prefetchTranslations(0);
-          refreshLangSelection();
-          console.log(`[YT-DualSub] Đã chuyển ngôn ngữ dịch sang: ${lang.name}`);
-        }
-      };
-
-      langRows.push({ row: langRow, check, lang });
-      langGrid.appendChild(langRow);
+      const opt = document.createElement('option');
+      opt.value = lang.code;
+      opt.textContent = `${lang.name} (${lang.deeplCode})`;
+      langSelect.appendChild(opt);
     }
-    refreshLangSelection();
-    langSection.appendChild(langGrid);
+    langSelect.value = STATE.targetLang;
+    langSelect.onchange = () => {
+      const code = langSelect.value;
+      if (code && code !== STATE.targetLang) {
+        STATE.targetLang = code;
+        try { GM_setValue('yt_dualsub_target_lang', code); } catch (e) {}
+        translator.resetSession();
+        STATE.translatedMap.clear();
+        prefetchTranslations(0);
+        console.log(`[YT-DualSub] Đã chuyển ngôn ngữ dịch sang: ${code}`);
+      }
+    };
+    langSection.appendChild(langSelect);
     modalBody.appendChild(langSection);
 
     // 2. Tùy chọn Phụ đề gốc
@@ -1476,51 +1509,45 @@
     styleSectionTitle.style.cssText = `font-size:11px; font-weight:700; color:${isDark ? '#9ca3af' : '#6b7280'}; margin-bottom:8px; letter-spacing:0.5px;`;
     styleSection.appendChild(styleSectionTitle);
 
-    // Font size selector
+    // Font size: input nhập trực tiếp (mặc định 28px)
     const fontRow = document.createElement('div');
-    fontRow.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; font-size:13px;';
+    fontRow.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:12px; font-size:13px;';
     const fontLabel = document.createElement('span');
-    function updateFontLabel() {
-      fontLabel.textContent = `Kích cỡ chữ (${STATE.fontSize}px):`;
-    }
-    updateFontLabel();
+    fontLabel.textContent = 'Kích cỡ chữ:';
+    fontLabel.style.whiteSpace = 'nowrap';
 
-    const fontGroup = document.createElement('div');
-    fontGroup.style.cssText = 'display:flex; gap:6px;';
-    const fontSizes = [16, 20, 24, 28];
-    const fontButtons = [];
-
-    function refreshFontSizeSelection() {
-      updateFontLabel();
-      fontButtons.forEach(({ btn, fs }) => {
-        const isFs = STATE.fontSize === fs;
-        btn.style.border = `1px solid ${isFs ? (isDark ? '#fef08a' : '#ca8a04') : (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)')}`;
-        btn.style.background = isFs
-          ? (isDark ? 'rgba(254, 240, 138, 0.25)' : 'rgba(202, 138, 4, 0.16)')
-          : (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)');
-        btn.style.color = isFs
-          ? (isDark ? '#fef08a' : '#ca8a04')
-          : (isDark ? '#ffffff' : '#0f0f0f');
-        btn.style.fontWeight = isFs ? '700' : '500';
-      });
-    }
-
-    for (const fs of fontSizes) {
-      const fBtn = document.createElement('button');
-      fBtn.textContent = `${fs}px`;
-      fBtn.style.cssText = 'padding:4px 8px; border-radius:6px; font-size:11px; cursor:pointer; transition:all 0.15s;';
-      fBtn.onclick = () => {
-        STATE.fontSize = fs;
-        GM_setValue('yt_dualsub_font_size', fs);
+    const fontInput = document.createElement('input');
+    fontInput.type = 'number';
+    fontInput.min = '10';
+    fontInput.max = '48';
+    fontInput.step = '1';
+    fontInput.value = String(STATE.fontSize || 28);
+    fontInput.style.cssText = `
+      width: 90px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      background: ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'};
+      color: ${isDark ? '#ffffff' : '#0f0f0f'};
+      border: 1px solid ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'};
+      outline: none;
+    `;
+    function applyFontInput() {
+      let v = Math.round(Number(fontInput.value) || 28);
+      v = Math.max(10, Math.min(48, v));
+      fontInput.value = String(v);
+      if (v !== STATE.fontSize) {
+        STATE.fontSize = v;
+        try { GM_setValue('yt_dualsub_font_size', v); } catch (e) {}
         renderer.applyStyles();
-        refreshFontSizeSelection();
-      };
-      fontButtons.push({ btn: fBtn, fs });
-      fontGroup.appendChild(fBtn);
+      }
     }
-    refreshFontSizeSelection();
+    fontInput.onchange = applyFontInput;
+    fontInput.oninput = applyFontInput;
     fontRow.appendChild(fontLabel);
-    fontRow.appendChild(fontGroup);
+    fontRow.appendChild(fontInput);
     styleSection.appendChild(fontRow);
 
     // Color selector
@@ -1568,6 +1595,47 @@
     }
     refreshColorSelection();
     colorRow.appendChild(colorGroup);
+
+    // ponytail: input màu CSS tùy ý (hex / tên màu / rgb...), đồng bộ với color picker
+    const customColorRow = document.createElement('div');
+    customColorRow.style.cssText = 'display:flex; gap:8px; align-items:center; margin-top:10px;';
+    const colorPicker = document.createElement('input');
+    colorPicker.type = 'color';
+    colorPicker.value = /^#[0-9a-fA-F]{6}$/.test(STATE.transColor || '') ? STATE.transColor : '#fef08a';
+    colorPicker.title = 'Chọn màu tùy ý';
+    colorPicker.style.cssText = 'width:34px; height:28px; padding:0; border:none; border-radius:6px; cursor:pointer; background:transparent; flex-shrink:0;';
+    const colorTextInput = document.createElement('input');
+    colorTextInput.type = 'text';
+    colorTextInput.placeholder = '#fef08a / red / rgb(...)';
+    colorTextInput.value = STATE.transColor || '';
+    colorTextInput.spellcheck = false;
+    colorTextInput.style.cssText = `
+      flex: 1;
+      padding: 6px 8px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-family: monospace;
+      background: ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'};
+      color: ${isDark ? '#ffffff' : '#0f0f0f'};
+      border: 1px solid ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'};
+      outline: none;
+      box-sizing: border-box;
+    `;
+    function applyCustomColor(v, syncPicker) {
+      v = (v || '').trim();
+      if (!isValidCssColor(v)) return;
+      STATE.transColor = v;
+      try { GM_setValue('yt_dualsub_trans_color', v); } catch (e) {}
+      renderer.applyStyles();
+      refreshColorSelection();
+      if (colorTextInput.value !== v) colorTextInput.value = v;
+      if (syncPicker && /^#[0-9a-fA-F]{6}$/.test(v)) colorPicker.value = v;
+    }
+    colorPicker.oninput = () => applyCustomColor(colorPicker.value, false);
+    colorTextInput.onchange = () => applyCustomColor(colorTextInput.value, true);
+    customColorRow.appendChild(colorPicker);
+    customColorRow.appendChild(colorTextInput);
+    colorRow.appendChild(customColorRow);
     styleSection.appendChild(colorRow);
     modalBody.appendChild(styleSection);
 
@@ -1608,14 +1676,70 @@
       transition: background 0.15s;
     `;
     keyEditBtn.onclick = () => {
-      promptForApiKey(getDeepLApiKey());
-      updateKeyInfo();
-      updateKeyEditBtn();
+      keyInput.focus();
+      keyInput.select();
     };
 
     keyRow.appendChild(keyInfo);
     keyRow.appendChild(keyEditBtn);
     apiSection.appendChild(keyRow);
+
+    // ponytail: input inline thay prompt() (prompt hay bị chặn + không thấy localdb) — Lưu gọi setDeepLApiKey dual-store
+    const keyInputRow = document.createElement('div');
+    keyInputRow.style.cssText = 'display:flex; gap:8px; margin-bottom:10px;';
+    const keyInput = document.createElement('input');
+    keyInput.type = 'password';
+    keyInput.placeholder = 'Dán DeepL key ...:fx';
+    keyInput.value = getDeepLApiKey();
+    keyInput.autocomplete = 'off';
+    keyInput.spellcheck = false;
+    keyInput.style.cssText = `
+      flex: 1;
+      padding: 7px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-family: monospace;
+      background: ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'};
+      color: ${isDark ? '#ffffff' : '#0f0f0f'};
+      border: 1px solid ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'};
+      outline: none;
+      box-sizing: border-box;
+    `;
+    const keySaveBtn = document.createElement('button');
+    keySaveBtn.textContent = 'Lưu';
+    keySaveBtn.style.cssText = `
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      background: ${isDark ? '#fef08a' : '#ca8a04'};
+      color: ${isDark ? '#000000' : '#ffffff'};
+      flex-shrink: 0;
+    `;
+    function saveKeyFromInput() {
+      const v = (keyInput.value || '').trim();
+      setDeepLApiKey(v);
+      // đọc lại để xác nhận đã persist (GM + localStorage)
+      keyInput.value = getDeepLApiKey();
+      translator.resetSession();
+      STATE.translatedMap.clear();
+      ANTI_SPAM.rateLimitCooldownUntil = 0;
+      ANTI_SPAM.consecutive429Count = 0;
+      updateChannelButtonState();
+      updateKeyInfo();
+      updateKeyEditBtn();
+      if (getDeepLApiKey()) prefetchTranslations(0);
+    }
+    keySaveBtn.onclick = saveKeyFromInput;
+    keyInput.onkeydown = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); saveKeyFromInput(); }
+      e.stopPropagation();
+    };
+    keyInputRow.appendChild(keyInput);
+    keyInputRow.appendChild(keySaveBtn);
+    apiSection.appendChild(keyInputRow);
 
     // Loại API Endpoint: Auto / Free / Pro
     const typeRow = document.createElement('div');
@@ -1683,6 +1807,31 @@
     tipText.textContent = '💡 Phím tắt Alt + D để Bật/Tắt nhanh khi xem video.';
     tipText.style.cssText = `font-size:11px; color:${isDark ? '#9ca3af' : '#6b7280'}; text-align:center;`;
     footer.appendChild(tipText);
+
+    const srtBtn = document.createElement('button');
+    srtBtn.textContent = STATE.cues.length ? `💾 Tải SRT song ngữ (${STATE.cues.length} câu)` : '💾 Tải SRT song ngữ';
+    srtBtn.title = 'Xuất file .srt gồm câu gốc + câu dịch (câu chưa dịch chỉ có câu gốc)';
+    srtBtn.style.cssText = `
+      width: 100%;
+      padding: 8px 0;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      background: transparent;
+      color: ${isDark ? '#fef08a' : '#ca8a04'};
+      border: 1px solid ${isDark ? 'rgba(254,240,138,0.4)' : 'rgba(202,138,4,0.5)'};
+      transition: opacity 0.15s;
+    `;
+    srtBtn.onmouseenter = () => srtBtn.style.opacity = '0.85';
+    srtBtn.onmouseleave = () => srtBtn.style.opacity = '1';
+    srtBtn.onclick = () => {
+      if (!downloadBilingualSrt()) {
+        srtBtn.textContent = '⏳ Chưa có phụ đề — hãy bật CC và chờ tải xong';
+        setTimeout(() => { srtBtn.textContent = '💾 Tải SRT song ngữ'; }, 2000);
+      }
+    };
+    footer.appendChild(srtBtn);
 
     const doneBtn = document.createElement('button');
     doneBtn.textContent = 'Hoàn tất & Đóng';
