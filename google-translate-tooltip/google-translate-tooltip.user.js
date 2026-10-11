@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.2.1
+// @version      1.2.2
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -219,14 +219,17 @@
         .gtt-ipa-subline {
             display: block;
             font-size: 12px;
-            color: #5f6368;
-            font-style: italic;
-            margin-top: 2px;
+            color: #1a56db;
+            font-weight: 500;
+            font-style: normal;
+            margin-top: 3px;
             margin-left: 2px;
+            word-spacing: 3px;
+            letter-spacing: 0.2px;
             font-family: "Lucida Sans Unicode", "DejaVu Sans", "Segoe UI", sans-serif;
         }
         .gtt-dark .gtt-ipa-subline {
-            color: #9aa0a6;
+            color: #8ab4f8;
         }
         .gtt-tts-btn {
             background: none;
@@ -670,17 +673,23 @@
         if (!clean) return '';
         if (ipaCache.has(clean)) return ipaCache.get(clean);
 
-        // Thử tra cứu cả cụm trước
-        let ipa = await fetchWordIpa(clean);
-        if (!ipa && clean.includes(' ')) {
+        let ipa = '';
+        if (clean.includes(' ')) {
+            // Đối với câu hoặc cụm từ: tra cứu riêng từng từ để các từ được tách rời rõ ràng bằng khoảng trắng
             const words = clean.split(/\s+/).filter(Boolean);
             if (words.length <= parseInt(getConfig('ipaWordLimit'), 10)) {
-                const parts = await Promise.all(words.map(w => fetchWordIpa(w)));
-                if (parts.some(Boolean)) {
-                    ipa = parts.filter(Boolean).join(' ');
+                const parts = await Promise.all(words.map(async w => {
+                    const wIpa = await fetchWordIpa(w);
+                    return wIpa || w;
+                }));
+                if (parts.some((p, idx) => p !== words[idx])) {
+                    ipa = parts.join(' ');
                 }
             }
+        } else {
+            ipa = await fetchWordIpa(clean);
         }
+
         if (ipa) {
             ipaCache.set(clean, ipa);
         }
@@ -928,8 +937,9 @@
         const allowIpa = getConfig('enableIpa') && numWords <= parseInt(getConfig('ipaWordLimit'), 10);
 
         // Tìm phiên âm gốc và phiên âm bản dịch từ Google (dt=rm)
-        let srcPronounce = extractPhonetics(mainData, true);
-        let tgtPronounce = extractPhonetics(mainData, false);
+        const isVi = (code) => code === 'vi' || (typeof code === 'string' && code.startsWith('vi'));
+        let srcPronounce = isVi(detectedLang) ? '' : extractPhonetics(mainData, true);
+        let tgtPronounce = isVi(getConfig('to')) ? '' : extractPhonetics(mainData, false);
 
         let html = '';
 
@@ -939,7 +949,7 @@
                 <span class="gtt-lang-tag">${escapeHtml(detectedLang)}</span>
                 <span class="gtt-orig-text">${escapeHtml(currentSelectedText)}</span>
                 ${getConfig('tts') ? `<button class="gtt-tts-btn" data-tts-text="${escapeHtml(currentSelectedText)}" data-tts-lang="${escapeHtml(detectedLang)}" title="Phát âm (Bấm lần 2 để đọc chậm)">${SPEAKER_ICON_SVG}</button>` : ''}
-                <span class="gtt-ipa-subline" id="gtt-ipa-src" style="${allowIpa && srcPronounce ? 'display:block;' : 'display:none;'}">${srcPronounce ? `/${escapeHtml(srcPronounce)}/` : ''}</span>
+                ${!isVi(detectedLang) ? `<span class="gtt-ipa-subline" id="gtt-ipa-src" style="${allowIpa && srcPronounce ? 'display:block;' : 'display:none;'}">${srcPronounce ? `/${escapeHtml(srcPronounce)}/` : ''}</span>` : ''}
             </div>
         `;
 
@@ -949,7 +959,7 @@
                 <span class="gtt-lang-tag">${escapeHtml(getConfig('to'))}</span>
                 <span class="gtt-trans-text">${escapeHtml(fullTranslatedText)}</span>
                 ${getConfig('tts') ? `<button class="gtt-tts-btn" data-tts-text="${escapeHtml(fullTranslatedText)}" data-tts-lang="${escapeHtml(getConfig('to'))}" title="Phát âm (Bấm lần 2 để đọc chậm)">${SPEAKER_ICON_SVG}</button>` : ''}
-                <span class="gtt-ipa-subline" id="gtt-ipa-tgt0" style="${allowIpa && tgtPronounce ? 'display:block;' : 'display:none;'}">${tgtPronounce ? `/${escapeHtml(tgtPronounce)}/` : ''}</span>
+                ${!isVi(getConfig('to')) ? `<span class="gtt-ipa-subline" id="gtt-ipa-tgt0" style="${allowIpa && tgtPronounce ? 'display:block;' : 'display:none;'}">${tgtPronounce ? `/${escapeHtml(tgtPronounce)}/` : ''}</span>` : ''}
             </div>
         `;
 
@@ -957,13 +967,13 @@
         if (results[1]) {
             const data2 = results[1];
             const text2 = data2[0] ? data2[0].map(item => item[0]).filter(Boolean).join('') : '';
-            const pron2 = extractPhonetics(data2, false);
+            const pron2 = isVi(getConfig('to2')) ? '' : extractPhonetics(data2, false);
             html += `
                 <div class="gtt-translation-row" style="opacity:0.95;">
                     <span class="gtt-lang-tag">${escapeHtml(getConfig('to2'))}</span>
                     <span class="gtt-trans-text">${escapeHtml(text2)}</span>
                     ${getConfig('tts') ? `<button class="gtt-tts-btn" data-tts-text="${escapeHtml(text2)}" data-tts-lang="${escapeHtml(getConfig('to2'))}" title="Phát âm (Bấm lần 2 để đọc chậm)">${SPEAKER_ICON_SVG}</button>` : ''}
-                    <span class="gtt-ipa-subline" id="gtt-ipa-tgt1" style="${allowIpa && pron2 ? 'display:block;' : 'display:none;'}">${pron2 ? `/${escapeHtml(pron2)}/` : ''}</span>
+                    ${!isVi(getConfig('to2')) ? `<span class="gtt-ipa-subline" id="gtt-ipa-tgt1" style="${allowIpa && pron2 ? 'display:block;' : 'display:none;'}">${pron2 ? `/${escapeHtml(pron2)}/` : ''}</span>` : ''}
                 </div>
             `;
         }
@@ -972,13 +982,13 @@
         if (results[2]) {
             const data3 = results[2];
             const text3 = data3[0] ? data3[0].map(item => item[0]).filter(Boolean).join('') : '';
-            const pron3 = extractPhonetics(data3, false);
+            const pron3 = isVi(getConfig('to3')) ? '' : extractPhonetics(data3, false);
             html += `
                 <div class="gtt-translation-row" style="opacity:0.95;">
                     <span class="gtt-lang-tag">${escapeHtml(getConfig('to3'))}</span>
                     <span class="gtt-trans-text">${escapeHtml(text3)}</span>
                     ${getConfig('tts') ? `<button class="gtt-tts-btn" data-tts-text="${escapeHtml(text3)}" data-tts-lang="${escapeHtml(getConfig('to3'))}" title="Phát âm (Bấm lần 2 để đọc chậm)">${SPEAKER_ICON_SVG}</button>` : ''}
-                    <span class="gtt-ipa-subline" id="gtt-ipa-tgt2" style="${allowIpa && pron3 ? 'display:block;' : 'display:none;'}">${pron3 ? `/${escapeHtml(pron3)}/` : ''}</span>
+                    ${!isVi(getConfig('to3')) ? `<span class="gtt-ipa-subline" id="gtt-ipa-tgt2" style="${allowIpa && pron3 ? 'display:block;' : 'display:none;'}">${pron3 ? `/${escapeHtml(pron3)}/` : ''}</span>` : ''}
                 </div>
             `;
         }
@@ -1126,10 +1136,13 @@
 
             itemsToCheck.forEach(item => {
                 if (!item.text || countWords(item.text) > limit) return;
+                // Bỏ qua tiếng Việt hoàn toàn (dùng chữ Latinh, không hỗ trợ/không cần IPA)
+                if (isVi(item.lang)) return;
+
                 const el = bodyEl.querySelector(item.id);
-                // Nếu là Tiếng Anh (Google không trả phiên âm Latin) hoặc chưa có phiên âm từ Google -> tra cứu IPA
-                const isEnglish = (item.lang === 'en' || (item.lang && item.lang.startsWith('en')) || (item.lang === 'auto' && detectedLang && detectedLang.startsWith('en')));
-                if (el && (!item.hasPron || isEnglish)) {
+                // Tra cứu IPA Datamuse + Free Dictionary API dành riêng cho tiếng Anh
+                const isEnglish = (item.lang === 'en' || (typeof item.lang === 'string' && item.lang.startsWith('en')) || (item.lang === 'auto' && detectedLang && detectedLang.startsWith('en')));
+                if (el && isEnglish) {
                     getPhoneticIpa(item.text).then(ipa => {
                         if (ipa && popupEl) {
                             const targetEl = popupEl.querySelector(item.id);

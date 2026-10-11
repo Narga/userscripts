@@ -2,6 +2,21 @@
 
 ## Google Translate Tooltip
 
+## [1.2.2] - 2026-10-11
+
+### Tối ưu Hiển thị Phiên âm IPA & Loại bỏ IPA Tiếng Việt (IPA Visual & Linguistic Refinement)
+- **Cải thiện độ tương phản và thẩm mỹ IPA giao diện sáng**:
+  - Đổi màu ký âm ở giao diện sáng sang tone xanh hoàng gia đậm (`#1a56db`), tăng độ tương phản lên mức chuẩn WCAG AAA trên nền trắng `#ffffff`, khắc phục tình trạng chữ bị mờ/chìm khó đọc.
+  - Loại bỏ hiệu ứng chữ nghiêng (`font-style: normal; font-weight: 500;`) giúp các ký tự ngữ âm phức tạp (`ə, ɪ, θ, ʃ, æ`) hiển thị sắc nét, không bị nghiêng gây mỏi mắt.
+- **Tách rõ ràng các từ trong câu có IPA (`word-spacing`)**:
+  - Sửa cơ chế tra cứu câu/cụm từ: Tra cứu từng từ độc lập thay vì tra gộp cả câu vào Datamuse (vốn làm dính liền các từ vào nhau).
+  - Tách bạch các từ bằng khoảng trắng rõ ràng, kết hợp CSS `word-spacing: 3px` và `letter-spacing: 0.2px` giúp từng từ trong phiên âm đứng tách biệt, dễ nhìn.
+- **Loại bỏ hoàn toàn IPA đối với Tiếng Việt**:
+  - Tiếng Việt sử dụng chữ Quốc ngữ Latinh có dấu hoàn chỉnh nên không cần ký âm và không thuộc hệ từ điển IPA quốc tế CMU.
+  - Khắc phục lỗi hiển thị phiên âm tiếng Anh sai lệch đè lên từ tiếng Việt; ẩn hoàn toàn dòng IPA cho mọi dòng tiếng Việt (`vi`).
+
+---
+
 ## [1.2.1] - 2026-10-11
 
 ### Tối ưu Phát âm & Ký âm Đa Bản Dịch (TTS & Multi-Target Phonetics)
