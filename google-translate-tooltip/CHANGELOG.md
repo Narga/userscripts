@@ -2,7 +2,26 @@
 
 ## Google Translate Tooltip
 
-## [1.2.2] - 2026-10-11
+## [1.2.3] - 2026-10-11
+
+### Khôi phục Ký âm IPA Toàn diện cho Nội dung Dịch & Tích hợp Bộ Ngữ âm Tiếng Việt (Full Translation IPA & Vietnamese Phonetics Engine)
+- **Khôi phục hoàn toàn hiển thị ký âm IPA cho mọi bản dịch**:
+  - Khắc phục sự cố bản dịch bị mất dòng IPA ở v1.2.2 (khiến chỉ có câu gốc hiển thị).
+  - Khôi phục container ký âm `#gtt-ipa-tgt0`, `#gtt-ipa-tgt1`, `#gtt-ipa-tgt2` cho tất cả các hàng bản dịch (bản dịch chính, ngôn ngữ phụ 1, ngôn ngữ phụ 2).
+  - Tự động hiển thị song song ký âm ở cả **câu gốc** VÀ **tất cả bản dịch** phục vụ trọn vẹn nhu cầu học từ và đối chiếu phát âm.
+- **Tích hợp Bộ ký âm chuẩn ngữ âm học Quốc tế cho Tiếng Việt (0ms Local IPA Engine)**:
+  - Tự động chuyển đổi âm vị học tiếng Việt chính xác sang bảng ký âm quốc tế IPA (International Phonetic Alphabet) với đầy đủ âm đầu (onset: `qu` → `kw`, `ch/tr` → `c`, `đ` → `ɗ`), âm đệm/âm chính (nucleus diphthongs: `iê/ia` → `iə`, `ươ/ưa` → `ɨə`), âm cuối (coda: `nh/ch` → `ɲ/c`, `ng` → `ŋ`) và 6 thanh điệu chuẩn cao độ (`˧` ngang, `˧˥` sắc, `˨˩` huyền, `˧˩˨` hỏi, `˧ˀ˥` ngã, `˨˩ˀ` nặng).
+  - Ví dụ: `quả táo` → `/kwaː˧˩˨ taːw˧˥/`, `xin chào` → `/sin˧ caːw˨˩/`, `học tiếng anh` → `/hɔk˨˩ˀ tiəŋ˧˥ aːɲ˧/`.
+  - Xử lý hoàn toàn cục bộ (local rule-based) không cần gọi API mạng ngoài, phản hồi tức thời 0ms không gây giật trễ giao diện.
+- **Tùy chọn Cài đặt Bật/Tắt Ký âm Tiếng Việt linh hoạt (`includeViIpa`)**:
+  - Thêm checkbox **"Ký âm chuẩn Tiếng Việt (IPA)"** trong bảng Cài đặt (mặc định: bật).
+  - Người dùng có thể dễ dàng tắt riêng phần IPA tiếng Việt nếu chỉ muốn xem IPA cho tiếng Anh / Pinyin cho tiếng Trung / Romaji cho tiếng Nhật mà không ảnh hưởng đến các ngôn ngữ khác.
+- **Cơ chế nạp phiên âm đa tầng (Multi-tier Phonetic Cascade)**:
+  - Tiếng Việt: Chuyển đổi ngữ âm IPA chuẩn.
+  - Ngôn ngữ dùng chữ tượng hình / phi Latinh (Trung, Nhật, Nga, Hàn, Thái, Hindi, Ả Rập...): Lấy trực tiếp Pinyin, Romaji, Latinh transliteration từ Google Translate `dt=rm`.
+  - Tiếng Anh và ngôn ngữ Latinh khác: Tra cứu IPA chuẩn qua Datamuse API và Free Dictionary API.
+
+---
 
 ### Tối ưu Hiển thị Phiên âm IPA & Loại bỏ IPA Tiếng Việt (IPA Visual & Linguistic Refinement)
 - **Cải thiện độ tương phản và thẩm mỹ IPA giao diện sáng**:
