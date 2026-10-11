@@ -1,10 +1,13 @@
+
 // ==UserScript==
 // @name         Google SSO Popup Blocker
 // @namespace    CustomScripts
-// @version      1.1
-// @description  Chặn popup đăng nhập Google SSO (Google One Tap)
+// @version      2.0.0
+// @description  Block Google One Tap / GIS sign-in prompts
 // @author       narga
 // @homepage     https://github.com/narga
+// @downloadURL  https://raw.githubusercontent.com/Narga/userscripts/refs/heads/main/anti-google-sso-login/anti-google-sso-login.user.js
+// @updateURL    https://raw.githubusercontent.com/Narga/userscripts/refs/heads/main/anti-google-sso-login/anti-google-sso-login.user.js
 // @match        *://*/*
 // @exclude      *://localhost/*
 // @exclude      *://127.0.0.1/*
@@ -22,154 +25,276 @@
 (function () {
     'use strict';
 
-    // ===== CẤU HÌNH =====
+    // ============================================================
+    // CONFIGURATION
+    // ============================================================
     const CONFIG = {
-        debug: false,               // Bật/tắt debug logs
-        autoStop: true,             // Tự động dừng sau khi chặn thành công
-        observerTimeout: 60000,     // Timeout observer (60s)
-        checkInterval: 3000,        // Interval kiểm tra (3s)
-        maxChecks: 20               // Số lần check tối đa
+        debug: false,
+
+        // Keep observing for the lifetime of the page.
+        // Do not stop after the first successful removal.
+        persistent: true,
+
+        // Remove matching popup elements rather than only hiding them.
+        removeElements: true,
+
+        // Safety sweep for delayed or recreated elements.
+        fallbackIntervalMs: 2500,
+
+        // Set true only if you also want to hide Google's
+        // explicitly embedded sign-in buttons.
+        blockInlineSignInButtons: false
     };
 
-    const log = CONFIG.debug ? console.log.bind(console, '[SSO Blocker]') : () => { };
+    const log = (...args) => {
+        if (CONFIG.debug) {
+            console.log('[SSO Blocker]', ...args);
+        }
+    };
 
-    // ===== STATE =====
-    let blocked = false;
-    let checkCount = 0;
-    let intervalId = null;
-    let observerTimeout = null;
-    const processedElements = new WeakSet();
+    // ============================================================
+    // SELECTORS
+    // ============================================================
+    const POPUP_SELECTORS = [
+        '#credential_picker_container',
+        '#g_id_intermediate_iframe',
+        '#credential_picker_iframe',
+        'iframe[src*="accounts.google.com/gsi/"]',
+        'iframe[src*="accounts.google.com/gsi/iframe"]',
+        'iframe[src*="smartlock.google.com/iframe/"]'
+    ];
 
-    // ===== CSS HIDING =====
+    const CONFIG_SELECTORS = [
+        '#g_id_onload'
+    ];
+
+    const INLINE_SELECTORS = [
+        '.g_id_signin'
+    ];
+
+    const ALL_SELECTORS = [
+        ...POPUP_SELECTORS,
+        ...CONFIG_SELECTORS,
+        ...(CONFIG.blockInlineSignInButtons ? INLINE_SELECTORS : [])
+    ];
+
+    // ============================================================
+    // CSS FALLBACK
+    // ============================================================
+    const cssSelectors = [
+        ...POPUP_SELECTORS,
+        ...(CONFIG.blockInlineSignInButtons ? INLINE_SELECTORS : [])
+    ];
+
     GM_addStyle(`
-        #credential_picker_container,
-        #g_id_onload,
-        #g_id_intermediate_iframe,
-        iframe[src*="accounts.google.com/gsi/iframe"] {
+        ${cssSelectors.join(',\n')} {
             display: none !important;
             visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
         }
     `);
 
-    // ===== DISABLE GOOGLE SSO API =====
-    window.google = window.google || {};
-    window.google.accounts = {
-        id: {
-            initialize: () => { },
-            prompt: () => { },
-            renderButton: () => { },
-            revoke: () => { },
-            cancel: () => { }
-        }
-    };
+    // ============================================================
+    // ELEMENT HANDLING
+    // ============================================================
+    const removedElements = new WeakSet();
 
-    // ===== CLEANUP FUNCTION =====
-    function cleanup() {
-        if (intervalId) {
-            clearInterval(intervalId);
-            intervalId = null;
-        }
-        if (observerTimeout) {
-            clearTimeout(observerTimeout);
-        }
-        if (observer) {
-            observer.disconnect();
-        }
-        log('Cleaned up, stopped all checks');
-    }
+    function matchesTarget(element) {
+        if (!(element instanceof Element)) return false;
 
-    // ===== DISABLE CONTAINERS =====
-    function disableContainers() {
-        if (blocked) return false;
-
-        checkCount++;
-        let found = false;
-
-        // Remove Google SSO containers
-        const containerIds = ['g_id_onload', 'g_id_intermediate_iframe', 'credential_picker_container', 'g_id_signin'];
-
-        containerIds.forEach(id => {
-            const el = document.getElementById(id);
-            if (el && !processedElements.has(el)) {
-                processedElements.add(el);
-                el.remove();
-                found = true;
-                log('Removed container:', id);
+        return ALL_SELECTORS.some(selector => {
+            try {
+                return element.matches(selector);
+            } catch {
+                return false;
             }
         });
-
-        // Remove Google iframes
-        const iframes = document.querySelectorAll('iframe[src*="accounts.google.com"]');
-        iframes.forEach(iframe => {
-            if (!processedElements.has(iframe)) {
-                processedElements.add(iframe);
-                iframe.remove();
-                found = true;
-                log('Removed Google iframe');
-            }
-        });
-
-        // Auto-stop nếu đã block thành công
-        // Nhưng KHÔNG stop nếu chỉ đạt maxChecks (để bảo vệ lâu dài)
-        if (CONFIG.autoStop && found) {
-            blocked = true;
-            cleanup();
-            log(`Blocked and stopped after ${checkCount} checks`);
-        }
-
-        return found;
     }
 
-    // ===== MUTATION OBSERVER =====
-    const observer = new MutationObserver(() => {
-        if (!blocked) {
-            disableContainers();
+    function processElement(element) {
+        if (!(element instanceof Element)) return 0;
+
+        let count = 0;
+
+        if (matchesTarget(element)) {
+            if (!removedElements.has(element)) {
+                removedElements.add(element);
+
+                if (CONFIG.removeElements) {
+                    element.remove();
+                    log('Removed:', describeElement(element));
+                } else {
+                    element.style.setProperty('display', 'none', 'important');
+                    element.style.setProperty('visibility', 'hidden', 'important');
+                    log('Hidden:', describeElement(element));
+                }
+
+                count++;
+            }
+
+            // The target itself has been handled. Its descendants
+            // do not need to be processed after removal.
+            return count;
         }
-    });
 
-    // ===== INITIALIZATION =====
-    let initialized = false;
+        // Process matching descendants of newly inserted elements.
+        for (const selector of ALL_SELECTORS) {
+            let descendants;
 
-    function init() {
-        if (initialized) {
-            log('Already initialized, skipping');
-            return;
+            try {
+                descendants = element.querySelectorAll(selector);
+            } catch {
+                continue;
+            }
+
+            for (const child of descendants) {
+                if (removedElements.has(child)) continue;
+
+                removedElements.add(child);
+
+                if (CONFIG.removeElements) {
+                    child.remove();
+                    log('Removed descendant:', describeElement(child));
+                } else {
+                    child.style.setProperty('display', 'none', 'important');
+                    child.style.setProperty('visibility', 'hidden', 'important');
+                    log('Hidden descendant:', describeElement(child));
+                }
+
+                count++;
+            }
         }
-        initialized = true;
-        log('Initialized');
 
-        // Initial cleanup
-        disableContainers();
+        return count;
+    }
 
-        // Start observer với auto-timeout
+    function describeElement(element) {
+        const id = element.id ? `#${element.id}` : '';
+        const classes = typeof element.className === 'string'
+            ? element.className.trim().split(/\s+/).filter(Boolean)
+                .slice(0, 3).map(name => `.${name}`).join('')
+            : '';
+
+        return `${element.tagName.toLowerCase()}${id}${classes}`;
+    }
+
+    function sweepDocument() {
+        if (!document.documentElement) return;
+
+        let count = 0;
+
+        for (const selector of ALL_SELECTORS) {
+            let elements;
+
+            try {
+                elements = document.querySelectorAll(selector);
+            } catch {
+                continue;
+            }
+
+            for (const element of elements) {
+                count += processElement(element);
+            }
+        }
+
+        if (count > 0) {
+            log(`Sweep complete: handled ${count} element(s)`);
+        }
+    }
+
+    // ============================================================
+    // MUTATION OBSERVER
+    // ============================================================
+    let observer = null;
+    let pendingTimer = null;
+
+    function scheduleSweep() {
+        if (pendingTimer !== null) return;
+
+        pendingTimer = setTimeout(() => {
+            pendingTimer = null;
+            sweepDocument();
+        }, 50);
+    }
+
+    function onMutations(mutations) {
+        for (const mutation of mutations) {
+            if (mutation.type === 'attributes') {
+                const target = mutation.target;
+
+                if (target instanceof Element) {
+                    processElement(target);
+
+                    // src may be assigned after an iframe is inserted.
+                    if (
+                        target.tagName === 'IFRAME' &&
+                        matchesTarget(target)
+                    ) {
+                        processElement(target);
+                    }
+                }
+
+                continue;
+            }
+
+            for (const node of mutation.addedNodes) {
+                if (node instanceof Element) {
+                    processElement(node);
+                }
+            }
+        }
+    }
+
+    function startObserver() {
+        if (observer || !document.documentElement) return;
+
+        observer = new MutationObserver(onMutations);
+
         observer.observe(document.documentElement, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['src', 'id', 'class']
+        });
+
+        log('Persistent DOM observer started');
+    }
+
+    // ============================================================
+    // INITIALIZATION
+    // ============================================================
+    function init() {
+        if (!document.documentElement) return;
+
+        // Remove anything that already exists.
+        sweepDocument();
+
+        // Catch elements inserted after initialization.
+        startObserver();
+
+        // A periodic fallback catches unusual cases where a site's
+        // UI is recreated or attributes change in an unexpected way.
+        if (CONFIG.persistent) {
+            setInterval(sweepDocument, CONFIG.fallbackIntervalMs);
+        }
+
+        log('Google SSO Popup Blocker v2.0 loaded');
+    }
+
+    if (document.documentElement) {
+        init();
+    } else {
+        const startupObserver = new MutationObserver(() => {
+            if (!document.documentElement) return;
+
+            startupObserver.disconnect();
+            init();
+        });
+
+        startupObserver.observe(document, {
             childList: true,
             subtree: true
         });
-
-        // Auto-disconnect observer after timeout
-        observerTimeout = setTimeout(() => {
-            if (!blocked) {
-                log('Observer timeout reached');
-                observer.disconnect();
-            }
-        }, CONFIG.observerTimeout);
-
-        // Periodic check
-        intervalId = setInterval(() => {
-            if (!disableContainers() && checkCount >= CONFIG.maxChecks) {
-                cleanup();
-            }
-        }, CONFIG.checkInterval);
     }
-
-    // ===== START =====
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
-    }
-
-    log('SSO Blocker loaded');
-
 })();
