@@ -2,6 +2,24 @@
 
 ## Google Translate Tooltip
 
+## [1.2.1] - 2026-10-11
+
+### Tối ưu Phát âm & Ký âm Đa Bản Dịch (TTS & Multi-Target Phonetics)
+- **Tối giản giao diện phát âm & Bấm lần 2 đọc chậm**:
+  - Loại bỏ hoàn toàn nút đọc chậm rùa 🐢 thừa thãi theo yêu cầu; giữ giao diện tối giản, tinh tế với chỉ 1 nút loa 🔊 duy nhất cho mỗi dòng.
+  - Khi bấm nút loa lần thứ 2 (trong vòng 4.5 giây), script tự động phát chậm với hiệu ứng nhấp nháy màu vàng cam (`gtt-playing-slow`).
+  - Bổ sung bộ lọc chống dội chuột (mouse debounce > 80ms) tránh nhận nhầm một cú nhấp đúp vô tình thành lệnh đọc chậm.
+- **Tùy chỉnh mức phát chậm trong Cài đặt (`slowSpeed`)**:
+  - Thêm tùy chọn chọn tốc độ đọc chậm linh hoạt trong bảng Cài đặt: `0.75x` (Hơi chậm), `0.6x` (Chuẩn dễ nghe - Khuyên dùng), `0.5x` (Chậm), `0.35x` (Rất chậm).
+- **Khắc phục triệt để lỗi âm thanh phát trùng / méo tiếng (Audio Echo & Distortion Fix)**:
+  - Loại bỏ xung đột do tham số URL kép kết hợp `playbackRate` làm méo tiếng.
+  - Sử dụng cơ chế nạp Blob Audio duy nhất qua `GM_xmlhttpRequest` đi kèm `Request ID Guard` và `abort()`: tự động hủy bỏ mọi yêu cầu phát âm trước đó khi bấm nút mới. Triệt tiêu hoàn toàn hiện tượng 2 luồng âm thanh phát đè lên nhau gây vọng méo.
+- **Mở rộng Ký âm / Phiên âm IPA cho TẤT CẢ các bản dịch**:
+  - Dòng ký âm phụ (`gtt-ipa-subline`) hiển thị đồng bộ ở **từ gốc** VÀ **mọi ngôn ngữ bản dịch** (bản dịch chính, ngôn ngữ phụ 1, ngôn ngữ phụ 2).
+  - Tích hợp đa nguồn: Phiên âm Pinyin/Romaji/Latinh tự động từ Google Translate (`dt=rm`), kết hợp IPA chuẩn từ Datamuse API và fallback Free Dictionary API cho mọi dòng ngôn ngữ tiếng Anh.
+
+---
+
 ## [1.2.0] - 2026-10-11
 
 ### Tính năng Mới & Nâng cấp Phát âm - Phiên âm (TTS & IPA Upgrade)
