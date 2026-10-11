@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.2.3
+// @version      1.2.4
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -40,7 +40,6 @@
         showAlternatives: true,    // Hiển thị các bản dịch thay thế
         showSynonyms: true,        // Hiển thị từ đồng nghĩa trong định nghĩa
         enableIpa: true,           // Bật/tắt hiển thị ký âm / phiên âm (IPA/Pinyin/Romaji)
-        includeViIpa: true,        // Ký âm chuẩn cho tiếng Việt (dùng bộ ngữ âm học IPA)
         ipaWordLimit: 5,           // Áp dụng ký âm cho từ đơn hoặc câu dưới số từ này
         fontSize: '14px',
         theme: 'light',            // light hoặc dark
@@ -669,92 +668,6 @@
         return ipa;
     }
 
-    // ============================================================
-    // BỘ PHIÊN ÂM KÍ ÂM IPA TIẾNG VIỆT CHUẨN NGỮ ÂM HỌC
-    // Chuyển đổi chính xác 100% âm tiết và thanh điệu quốc tế
-    // ============================================================
-    const VN_TONE_MAP = {
-        'á':['a','˧˥'],'ắ':['ă','˧˥'],'ấ':['â','˧˥'],'é':['e','˧˥'],'ế':['ê','˧˥'],'í':['i','˧˥'],
-        'ó':['o','˧˥'],'ố':['ô','˧˥'],'ớ':['ơ','˧˥'],'ú':['u','˧˥'],'ứ':['ư','˧˥'],'ý':['y','˧˥'],
-        'à':['a','˨˩'],'ằ':['ă','˨˩'],'ầ':['â','˨˩'],'è':['e','˨˩'],'ề':['ê','˨˩'],'ì':['i','˨˩'],
-        'ò':['o','˨˩'],'ồ':['ô','˨˩'],'ờ':['ơ','˨˩'],'ù':['u','˨˩'],'ừ':['ư','˨˩'],'ỳ':['y','˨˩'],
-        'ả':['a','˧˩˨'],'ẳ':['ă','˧˩˨'],'ẩ':['â','˧˩˨'],'ẻ':['e','˧˩˨'],'ể':['ê','˧˩˨'],'ỉ':['i','˧˩˨'],
-        'ỏ':['o','˧˩˨'],'ổ':['ô','˧˩˨'],'ở':['ơ','˧˩˨'],'ủ':['u','˧˩˨'],'ử':['ư','˧˩˨'],'ỷ':['y','˧˩˨'],
-        'ã':['a','˧ˀ˥'],'ẵ':['ă','˧ˀ˥'],'ẫ':['â','˧ˀ˥'],'ẽ':['e','˧ˀ˥'],'ễ':['ê','˧ˀ˥'],'ĩ':['i','˧ˀ˥'],
-        'õ':['o','˧ˀ˥'],'ỗ':['ô','˧ˀ˥'],'ỡ':['ơ','˧ˀ˥'],'ũ':['u','˧ˀ˥'],'ữ':['ư','˧ˀ˥'],'ỹ':['y','˧ˀ˥'],
-        'ạ':['a','˨˩ˀ'],'ặ':['ă','˨˩ˀ'],'ậ':['â','˨˩ˀ'],'ẹ':['e','˨˩ˀ'],'ệ':['ê','˨˩ˀ'],'ị':['i','˨˩ˀ'],
-        'ọ':['o','˨˩ˀ'],'ộ':['ô','˨˩ˀ'],'ợ':['ơ','˨˩ˀ'],'ụ':['u','˨˩ˀ'],'ự':['ư','˨˩ˀ'],'ỵ':['y','˨˩ˀ']
-    };
-
-    function getVnSyllableIpa(raw) {
-        const s = raw.toLowerCase().trim();
-        if (!s) return '';
-        let tone = '˧';
-        let base = '';
-        for (const ch of s) {
-            if (VN_TONE_MAP[ch]) {
-                base += VN_TONE_MAP[ch][0];
-                tone = VN_TONE_MAP[ch][1];
-            } else {
-                base += ch;
-            }
-        }
-
-        let onset = '';
-        let rest = base;
-        const ONSETS = [
-            ['ngh','ŋ'],['ng','ŋ'],['nh','ɲ'],['th','tʰ'],['ch','c'],['tr','c'],
-            ['ph','f'],['kh','x'],['gh','ɣ'],['g','ɣ'],['gi','z'],['qu','kw'],
-            ['d','z'],['đ','ɗ'],['b','ɓ'],['t','t'],['c','k'],['k','k'],
-            ['l','l'],['m','m'],['n','n'],['p','p'],['r','z'],['s','s'],
-            ['x','s'],['v','v'],['h','h']
-        ];
-        for (const [k, v] of ONSETS) {
-            if (rest.startsWith(k)) {
-                onset = v;
-                rest = rest.slice(k.length);
-                break;
-            }
-        }
-
-        let coda = '';
-        const CODAS = [
-            ['ch','c'],['nh','ɲ'],['ng','ŋ'],['c','k'],['t','t'],['p','p'],
-            ['m','m'],['n','n'],['o','w'],['u','w'],['y','j'],['i','j']
-        ];
-        for (const [k, v] of CODAS) {
-            if (rest.length > k.length && rest.endsWith(k)) {
-                coda = v;
-                rest = rest.slice(0, -k.length);
-                break;
-            }
-        }
-
-        const NUCLEUS = [
-            ['iê','iə'],['ia','iə'],['yê','iə'],['ya','iə'],
-            ['uô','uə'],['ua','uə'],['ươ','ɨə'],['ưa','ɨə'],
-            ['ă','a'],['â','ə'],['ê','e'],['ô','o'],['ơ','əː'],
-            ['ư','ɨ'],['a','aː'],['e','ɛ'],['i','i'],['y','i'],
-            ['o','ɔ'],['u','u']
-        ];
-        let nuc = rest;
-        for (const [k, v] of NUCLEUS) {
-            if (rest === k) {
-                nuc = v;
-                break;
-            }
-        }
-
-        return onset + nuc + coda + tone;
-    }
-
-    function getVietnameseIpa(text) {
-        if (!text) return '';
-        const clean = text.replace(/[^\p{L}\s]/gu, '').trim();
-        if (!clean) return '';
-        return clean.split(/\s+/).map(getVnSyllableIpa).filter(Boolean).join(' ');
-    }
-
     async function getPhoneticIpa(text) {
         const clean = text.toLowerCase().replace(/[^\w\s'-]/g, '').trim();
         if (!clean) return '';
@@ -906,36 +819,12 @@
     function extractPhonetics(data, isSource = false) {
         if (!data || !Array.isArray(data[0])) return '';
         const items = data[0];
-
-        // 1. Kiểm tra dòng phiên âm tổng kết ở cuối data[0] (thường item[0] === null)
         for (let i = items.length - 1; i >= 0; i--) {
             const item = items[i];
-            if (Array.isArray(item)) {
-                if (isSource) {
-                    if (item[3] && typeof item[3] === 'string') return item[3].trim();
-                    if (item[2] && typeof item[2] === 'string' && item[0] === null) return item[2].trim();
-                } else {
-                    if (item[2] && typeof item[2] === 'string') return item[2].trim();
-                    if (item[3] && typeof item[3] === 'string' && item[0] === null) return item[3].trim();
-                }
-            }
-        }
-
-        // 2. Kiểm tra trong từng đoạn dịch
-        for (const item of items) {
-            if (Array.isArray(item)) {
-                if (isSource) {
-                    if (item[3] && typeof item[3] === 'string' && item[3] !== item[1]) {
-                        return item[3].trim();
-                    }
-                } else {
-                    if (item[2] && typeof item[2] === 'string' && item[2] !== item[0]) {
-                        return item[2].trim();
-                    }
-                    if (item[3] && typeof item[3] === 'string' && item[3] !== item[0] && item[3] !== item[1]) {
-                        return item[3].trim();
-                    }
-                }
+            if (!Array.isArray(item)) continue;
+            const val = isSource ? (item[3] || (item[0] === null ? item[2] : '')) : (item[2] || (item[0] === null ? item[3] : ''));
+            if (typeof val === 'string' && val.trim() && val !== item[0] && val !== item[1]) {
+                return val.trim();
             }
         }
         return '';
@@ -1031,16 +920,8 @@
         const allowIpa = getConfig('enableIpa') && numWords <= parseInt(getConfig('ipaWordLimit'), 10);
 
         // Tìm phiên âm gốc và phiên âm bản dịch từ Google (dt=rm)
-        const isVi = (code) => code === 'vi' || (typeof code === 'string' && code.startsWith('vi'));
-        let srcPronounce = extractPhonetics(mainData, true);
-        let tgtPronounce = extractPhonetics(mainData, false);
-
-        if (isVi(detectedLang) && getConfig('includeViIpa') && !srcPronounce) {
-            srcPronounce = getVietnameseIpa(currentSelectedText);
-        }
-        if (isVi(getConfig('to')) && getConfig('includeViIpa') && !tgtPronounce) {
-            tgtPronounce = getVietnameseIpa(fullTranslatedText);
-        }
+        const srcPronounce = extractPhonetics(mainData, true);
+        const tgtPronounce = extractPhonetics(mainData, false);
 
         let html = '';
 
@@ -1070,9 +951,6 @@
             const data2 = results[1];
             const text2 = data2[0] ? data2[0].map(item => item[0]).filter(Boolean).join('') : '';
             pron2 = extractPhonetics(data2, false);
-            if (isVi(getConfig('to2')) && getConfig('includeViIpa') && !pron2) {
-                pron2 = getVietnameseIpa(text2);
-            }
             html += `
                 <div class="gtt-translation-row" style="opacity:0.95;">
                     <span class="gtt-lang-tag">${escapeHtml(getConfig('to2'))}</span>
@@ -1089,9 +967,6 @@
             const data3 = results[2];
             const text3 = data3[0] ? data3[0].map(item => item[0]).filter(Boolean).join('') : '';
             pron3 = extractPhonetics(data3, false);
-            if (isVi(getConfig('to3')) && getConfig('includeViIpa') && !pron3) {
-                pron3 = getVietnameseIpa(text3);
-            }
             html += `
                 <div class="gtt-translation-row" style="opacity:0.95;">
                     <span class="gtt-lang-tag">${escapeHtml(getConfig('to3'))}</span>
@@ -1227,44 +1102,23 @@
         if (allowIpa) {
             const limit = parseInt(getConfig('ipaWordLimit'), 10) || 5;
             const itemsToCheck = [
-                { id: '#gtt-ipa-src', text: currentSelectedText, lang: detectedLang, hasPron: Boolean(srcPronounce) },
-                { id: '#gtt-ipa-tgt0', text: fullTranslatedText, lang: getConfig('to'), hasPron: Boolean(tgtPronounce) }
+                { id: '#gtt-ipa-src', text: currentSelectedText, hasPron: Boolean(srcPronounce) },
+                { id: '#gtt-ipa-tgt0', text: fullTranslatedText, hasPron: Boolean(tgtPronounce) }
             ];
             if (results[1]) {
-                const data2 = results[1];
-                const text2 = data2[0] ? data2[0].map(item => item[0]).filter(Boolean).join('') : '';
-                itemsToCheck.push({ id: '#gtt-ipa-tgt1', text: text2, lang: getConfig('to2'), hasPron: Boolean(pron2) });
+                const text2 = results[1][0] ? results[1][0].map(item => item[0]).filter(Boolean).join('') : '';
+                itemsToCheck.push({ id: '#gtt-ipa-tgt1', text: text2, hasPron: Boolean(pron2) });
             }
             if (results[2]) {
-                const data3 = results[2];
-                const text3 = data3[0] ? data3[0].map(item => item[0]).filter(Boolean).join('') : '';
-                itemsToCheck.push({ id: '#gtt-ipa-tgt2', text: text3, lang: getConfig('to3'), hasPron: Boolean(pron3) });
+                const text3 = results[2][0] ? results[2][0].map(item => item[0]).filter(Boolean).join('') : '';
+                itemsToCheck.push({ id: '#gtt-ipa-tgt2', text: text3, hasPron: Boolean(pron3) });
             }
 
             itemsToCheck.forEach(item => {
-                if (!item.text || countWords(item.text) > Math.max(limit, 8)) return;
+                if (!item.text || item.hasPron || countWords(item.text) > limit) return;
                 const el = bodyEl.querySelector(item.id);
                 if (!el) return;
 
-                // Nếu là tiếng Việt:
-                if (isVi(item.lang)) {
-                    if (getConfig('includeViIpa')) {
-                        const vnIpa = getVietnameseIpa(item.text);
-                        if (vnIpa && popupEl) {
-                            const targetEl = popupEl.querySelector(item.id);
-                            if (targetEl) {
-                                targetEl.textContent = `/${vnIpa}/`;
-                                targetEl.style.display = 'block';
-                            }
-                        }
-                    }
-                    return;
-                }
-
-                // Nếu đã có phiên âm (Pinyin/Romaji từ Google) thì giữ nguyên
-                if (item.hasPron) return;
-
-                // Tra cứu IPA qua Datamuse / Free Dictionary API cho các ngôn ngữ khác
                 getPhoneticIpa(item.text).then(ipa => {
                     if (ipa && popupEl) {
                         const targetEl = popupEl.querySelector(item.id);
@@ -1375,9 +1229,6 @@
                         Dưới <input type="number" id="gtt-set-ipa-limit" value="${getConfig('ipaWordLimit')}" min="1" max="20" style="width:38px;padding:1px 3px;"/> từ
                     </span>
                 </div>
-                <div class="gtt-field-row" style="margin-left: 18px; margin-top: -4px;">
-                    <label><input type="checkbox" id="gtt-set-vi-ipa" ${getConfig('includeViIpa') ? 'checked' : ''}/> Ký âm chuẩn Tiếng Việt (IPA)</label>
-                </div>
 
                 <div class="gtt-field-row">
                     <label><input type="checkbox" id="gtt-set-tts" ${getConfig('tts') ? 'checked' : ''}/> Nút phát âm (TTS)</label>
@@ -1426,7 +1277,6 @@
             setConfig('showAlternatives', document.getElementById('gtt-set-alts').checked);
             setConfig('showSynonyms', document.getElementById('gtt-set-syns').checked);
             setConfig('enableIpa', document.getElementById('gtt-set-ipa').checked);
-            setConfig('includeViIpa', document.getElementById('gtt-set-vi-ipa').checked);
             setConfig('ipaWordLimit', parseInt(document.getElementById('gtt-set-ipa-limit').value, 10) || 5);
             setConfig('tts', document.getElementById('gtt-set-tts').checked);
             setConfig('ttsEngine', document.getElementById('gtt-set-tts-engine').value);

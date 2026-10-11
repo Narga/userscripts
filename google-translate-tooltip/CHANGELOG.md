@@ -2,7 +2,22 @@
 
 ## Google Translate Tooltip
 
-## [1.2.3] - 2026-10-11
+## [1.2.4] - 2026-10-11
+
+### Tối giản & Tinh gọn Mã nguồn (Simplification, Zero-Overhead & Streamlined Phonetics)
+- **Loại bỏ bộ chuyển đổi âm vị học cục bộ (Zero-Overhead Conversion)**:
+  - Loại bỏ hoàn toàn bảng ánh xạ thanh điệu `VN_TONE_MAP` và các hàm phân tích âm tiết `getVnSyllableIpa`, `getVietnameseIpa`.
+  - Không can thiệp chuyển đổi cục bộ làm nặng script; giữ nguyên vẹn 100% kết quả tự nhiên trả về từ nguồn chính thức (Google Translate API & Datamuse API).
+- **Tinh gọn hàm trích xuất phiên âm `extractPhonetics`**:
+  - Tối ưu vòng lặp trích xuất phiên âm từ Google Translate API (`dt=rm`), giảm từ 37 dòng xuống còn 10 dòng sạch sẽ, hiệu năng cao.
+  - Lấy trực tiếp Pinyin (tiếng Trung), Romaji (tiếng Nhật), và phiên âm Latinh chuẩn cho các hệ chữ phi Latinh (Nga, Hàn, Thái, Ả Rập, Hindi...) mà Google đã hỗ trợ.
+- **Tối ưu hóa luồng nạp IPA cho bản dịch**:
+  - Giữ luồng tra cứu trực tiếp, không đặt rào cản nhân tạo: nếu Google đã có phiên âm thì hiển thị ngay, nếu chưa có thì tra cứu qua từ điển phonetic (Datamuse/Dictionary) cho từ đơn/cụm từ ngắn.
+  - Loại bỏ các nhánh điều kiện dư thừa, biến rườm rà và tùy chọn không cần thiết trong cấu hình.
+- **Giao diện Cài đặt gọn gàng, tinh tế**:
+  - Loại bỏ mục cấu hình thừa `includeViIpa`, giữ lại các tùy chọn cốt lõi hữu dụng nhất.
+
+---
 
 ### Khôi phục Ký âm IPA Toàn diện cho Nội dung Dịch & Tích hợp Bộ Ngữ âm Tiếng Việt (Full Translation IPA & Vietnamese Phonetics Engine)
 - **Khôi phục hoàn toàn hiển thị ký âm IPA cho mọi bản dịch**:
