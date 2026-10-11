@@ -7,8 +7,10 @@ Bộ sưu tập userscripts giúp tối ưu hóa và cải thiện trải nghi�
 1. [YouTube Dual Subtitles Pro](#1-youtube-dual-subtitles-pro) (`youtube-dual-subtitles`) - Phụ đề song ngữ YouTube thông minh với DeepL API.
 2. [Google SSO Popup Blocker](#2-google-sso-popup-blocker) (`anti-google-sso-login`) - Tự động chặn các popup / iframe Google One Tap gây phiền phức.
 3. [Facebook Comment Sorter](#3-facebook-comment-sorter) (`facebook-comments-sorter`) - Tự động chuyển thứ tự bình luận Facebook sang "Tất cả bình luận" hoặc "Mới nhất".
+4. [Google Translate Tooltip](#4-google-translate-tooltip) (`google-translate-tooltip`) - Tra từ và hiển thị tooltip dịch nhanh kèm phát âm khi bôi đen văn bản.
 
 ---
+
 
 ## 1. YouTube Dual Subtitles Pro
 
@@ -80,7 +82,27 @@ const CONFIG = {
 
 ---
 
+## 4. Google Translate Tooltip
+
+Hiển thị tooltip dịch tức thì kèm phát âm (Text-to-Speech) và định nghĩa từ điển khi bôi đen văn bản trên bất kỳ trang web nào.
+
+- **Thư mục:** [`google-translate-tooltip/`](google-translate-tooltip/)
+- **Script cài đặt:** [`google-translate-tooltip.user.js`](google-translate-tooltip/google-translate-tooltip.user.js)
+- **Lịch sử thay đổi:** [Xem CHANGELOG](google-translate-tooltip/CHANGELOG.md)
+
+### Tính năng chính (v1.0.0)
+- ✅ Bôi đen văn bản hiện icon Google Translate nhỏ gọn, bấm hoặc hover để hiển thị bản dịch.
+- ✅ Sử dụng Google Translate API (`client=gtx`) trực tiếp, không phụ thuộc token cũ, không lo lỗi kết nối.
+- ✅ Tích hợp phát âm (TTS) mượt mà qua Web Speech API / Google Audio.
+- ✅ Hỗ trợ dịch song song tối đa 3 ngôn ngữ đích cùng lúc.
+- ✅ Xem chi tiết từ điển (từ loại, từ đồng nghĩa) cho các từ đơn.
+- ✅ Giao diện thẻ nổi hiện đại, hỗ trợ cả Light Mode và Dark Mode, hỗ trợ kéo thả vị trí (drag & drop).
+- ✅ Tùy chọn phím bổ trợ: Chỉ kích hoạt khi giữ phím `Ctrl` hoặc `Alt`.
+
+---
+
 ## 🚀 Hướng dẫn Cài đặt Chung
+
 
 1. Cài đặt tiện ích mở rộng quản lý userscript trên trình duyệt:
    - [Tampermonkey](https://www.tampermonkey.net/) (Khuyến nghị cho Chrome, Firefox, Edge, Safari)
