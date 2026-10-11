@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.1.1
+// @version      1.2.0
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -15,7 +15,7 @@
 // @grant        GM_xmlhttpRequest
 // @connect      translate.googleapis.com
 // @connect      translate.google.com
-// @connect      api.dictionaryapi.dev
+// @connect      api.datamuse.com
 // @license      MIT
 // @downloadURL  https://raw.githubusercontent.com/Narga/userscripts/refs/heads/main/google-translate-tooltip/google-translate-tooltip.user.js
 // @updateURL    https://raw.githubusercontent.com/Narga/userscripts/refs/heads/main/google-translate-tooltip/google-translate-tooltip.user.js
@@ -33,6 +33,7 @@
         to2: 'Disabled',
         to3: 'Disabled',
         tts: true,
+        ttsEngine: 'google',       // 'google' (Google Translate chuẩn) hoặc 'system' (Web Speech API)
         hideDetailsDefault: false, // Ẩn chi tiết từ điển theo mặc định
         showAlternatives: true,    // Hiển thị các bản dịch thay thế
         showSynonyms: true,        // Hiển thị từ đồng nghĩa trong định nghĩa
@@ -235,13 +236,17 @@
             display: inline-flex;
             align-items: center;
             border-radius: 3px;
-            margin-left: 4px;
-            transition: color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+            margin-left: 3px;
+            transition: color 0.15s ease, background 0.15s ease, transform 0.15s ease;
         }
         .gtt-tts-btn:hover {
             color: #1a73e8;
             background: rgba(26,115,232,0.1);
-            transform: scale(1.1);
+            transform: scale(1.12);
+        }
+        .gtt-tts-slow-btn:hover {
+            color: #ea8600;
+            background: rgba(234,134,0,0.1);
         }
         .gtt-dark .gtt-tts-btn {
             color: #9aa0a6;
@@ -249,6 +254,26 @@
         .gtt-dark .gtt-tts-btn:hover {
             color: #8ab4f8;
             background: rgba(138,180,248,0.15);
+        }
+        .gtt-dark .gtt-tts-slow-btn:hover {
+            color: #fdd663;
+            background: rgba(253,214,99,0.15);
+        }
+        .gtt-tts-btn.gtt-playing {
+            color: #1a73e8 !important;
+            animation: gtt-pulse 1s ease infinite;
+        }
+        .gtt-tts-btn.gtt-playing-slow {
+            color: #ea8600 !important;
+            animation: gtt-pulse 1.3s ease infinite;
+        }
+        .gtt-dark .gtt-tts-btn.gtt-playing-slow {
+            color: #fdd663 !important;
+        }
+        @keyframes gtt-pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.22); }
+            100% { transform: scale(1); }
         }
 
         /* Toggle Details Button */
@@ -393,6 +418,7 @@
 
     const GOOGLE_ICON_SVG = `<svg viewBox="0 0 24 24"><path d="M12.87 15.07l-2.54-2.51.03-.08c1.77-1.97 3.05-4.24 3.79-6.62H17V4h-6V2h-2v2H3v1.85h8.33c-.7 2.01-1.8 3.93-3.23 5.58-.94-1.07-1.74-2.28-2.37-3.58l-1.73.71c.77 1.59 1.76 3.07 2.92 4.38L2.09 21.7 3.5 23.1l6.83-6.83 3.54 3.54 1.41-1.41-2.41-2.41-.01-.01zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/></svg>`;
     const SPEAKER_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
+    const TURTLE_ICON_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M19 14a3 3 0 0 0-3-3h-1.1A6 6 0 0 0 4 15.5V17a2 2 0 0 0 2 2h10a3 3 0 0 0 3-3v-2zm-9-2a4 4 0 0 1 3.9 3.12A1.5 1.5 0 0 0 12.5 16h-5a1.5 1.5 0 0 0-1.4 1A4 4 0 0 1 10 12zm10 2.5a1.5 1.5 0 0 1-1.5 1.5h-.08A4.98 4.98 0 0 0 17 14h-1a1 1 0 0 1 0-2h.5A2.5 2.5 0 0 1 19 14.5zM7 8a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/></svg>`;
 
     // ============================================================
     // STATE & DOM NODES
@@ -403,6 +429,8 @@
     let hoverTimer = null;
     let isShowingSettings = false;
     let isDetailsExpanded = false;
+    let lastTtsClick = { text: '', lang: '', time: 0, isSlow: false };
+    let currentAudio = null;
 
     // Cache kết quả tra cứu IPA cho từ đơn tiếng Anh
     const ipaCache = new Map();
@@ -556,11 +584,12 @@
     }
 
     // ============================================================
-    // TRA CỨU KÍ ÂM IPA BỔ SUNG (ENGLISH PHONETICS API)
-    // Non-blocking, có timeout ngắn để tránh treo hoàn toàn giao diện
+    // TRA CỨU KÍ ÂM IPA BẰNG DATAMUSE API (SIÊU TỐC, MIỄN PHÍ)
+    // Tích hợp từ điển ngữ âm CMU + IPA mapper quốc tế
     // ============================================================
-    function fetchEnglishIpa(word) {
+    function fetchDatamuseSingle(word) {
         const clean = word.toLowerCase().trim();
+        if (!clean) return Promise.resolve('');
         if (ipaCache.has(clean)) {
             return Promise.resolve(ipaCache.get(clean));
         }
@@ -568,23 +597,26 @@
         return new Promise((resolve) => {
             GM_xmlhttpRequest({
                 method: 'GET',
-                url: `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(clean)}`,
-                timeout: 2500,
+                url: `https://api.datamuse.com/words?sp=${encodeURIComponent(clean)}&qe=sp&md=r&ipa=1`,
+                timeout: 3000,
+                headers: { 'Accept': 'application/json' },
                 onload: (resp) => {
                     if (resp.status === 200) {
                         try {
                             const res = JSON.parse(resp.responseText);
-                            if (Array.isArray(res) && res[0]) {
-                                let phonetic = res[0].phonetic || '';
-                                if (!phonetic && Array.isArray(res[0].phonetics)) {
-                                    const withText = res[0].phonetics.find(p => p.text);
-                                    if (withText) phonetic = withText.text;
-                                }
-                                if (phonetic) {
-                                    phonetic = phonetic.replace(/^\/|\/$/g, '').trim();
-                                    ipaCache.set(clean, phonetic);
-                                    resolve(phonetic);
-                                    return;
+                            if (Array.isArray(res) && res.length > 0) {
+                                for (const item of res) {
+                                    if (Array.isArray(item.tags)) {
+                                        const ipaTag = item.tags.find(t => t.startsWith('ipa_pron:'));
+                                        if (ipaTag) {
+                                            const ipa = ipaTag.substring(9).trim();
+                                            if (ipa) {
+                                                ipaCache.set(clean, ipa);
+                                                resolve(ipa);
+                                                return;
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         } catch (_) {}
@@ -597,44 +629,135 @@
         });
     }
 
-    // ============================================================
-    // TEXT TO SPEECH (Phát âm giọng đọc chuẩn cho từng ngôn ngữ)
-    // ============================================================
-    function playTTS(text, lang) {
-        if (!text) return;
-        const targetLang = (!lang || lang === 'auto') ? 'en' : lang;
+    async function getPhoneticIpa(text) {
+        const clean = text.toLowerCase().replace(/[^\w\s'-]/g, '').trim();
+        if (!clean) return '';
+        if (ipaCache.has(clean)) return ipaCache.get(clean);
 
-        if ('speechSynthesis' in window) {
-            window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = targetLang;
-
-            let hasSpoken = false;
-            utterance.onstart = () => { hasSpoken = true; };
-
-            const fallbackTimer = setTimeout(() => {
-                if (!hasSpoken) {
-                    playGoogleAudioTTS(text, targetLang);
+        // Thử tra cứu cả cụm trước
+        let ipa = await fetchDatamuseSingle(clean);
+        if (!ipa && clean.includes(' ')) {
+            const words = clean.split(/\s+/).filter(Boolean);
+            if (words.length <= parseInt(getConfig('ipaWordLimit'), 10)) {
+                const parts = await Promise.all(words.map(w => fetchDatamuseSingle(w)));
+                if (parts.some(Boolean)) {
+                    ipa = parts.filter(Boolean).join(' ');
                 }
-            }, 600);
-
-            utterance.onend = () => clearTimeout(fallbackTimer);
-            utterance.onerror = () => {
-                clearTimeout(fallbackTimer);
-                playGoogleAudioTTS(text, targetLang);
-            };
-
-            window.speechSynthesis.speak(utterance);
-            return;
+            }
         }
-
-        playGoogleAudioTTS(text, targetLang);
+        if (ipa) {
+            ipaCache.set(clean, ipa);
+        }
+        return ipa || '';
     }
 
-    function playGoogleAudioTTS(text, lang) {
-        const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${encodeURIComponent(lang)}&client=tw-ob&q=${encodeURIComponent(text)}`;
-        const audio = new Audio(ttsUrl);
-        audio.play().catch(e => console.warn('[GTT] Lỗi phát âm audio:', e));
+    // ============================================================
+    // TEXT TO SPEECH (Hỗ trợ đọc chậm & chọn nguồn Google Translate)
+    // ============================================================
+    function playTTS(text, lang, isSlow = false, onEndCallback = null) {
+        if (!text) return;
+        const targetLang = (!lang || lang === 'auto') ? 'en' : lang;
+        const engine = getConfig('ttsEngine');
+
+        if (engine === 'system' && 'speechSynthesis' in window) {
+            playSystemTTS(text, targetLang, isSlow, onEndCallback);
+        } else {
+            playGoogleAudioTTS(text, targetLang, isSlow, onEndCallback);
+        }
+    }
+
+    function playGoogleAudioTTS(text, lang, isSlow = false, onEndCallback = null) {
+        if (currentAudio) {
+            try { currentAudio.pause(); } catch (_) {}
+            currentAudio = null;
+        }
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+        }
+
+        const speedParam = isSlow ? '&ttsspeed=0.24' : '';
+        const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${encodeURIComponent(lang)}&client=tw-ob&q=${encodeURIComponent(text)}${speedParam}`;
+
+        try {
+            const audio = new Audio();
+            audio.src = ttsUrl;
+            if (isSlow) audio.playbackRate = 0.75;
+
+            audio.onended = () => {
+                if (onEndCallback) onEndCallback();
+            };
+            audio.onerror = () => {
+                fetchAndPlayBlobAudio(ttsUrl, isSlow, onEndCallback);
+            };
+
+            currentAudio = audio;
+            const p = audio.play();
+            if (p) {
+                p.catch(() => {
+                    fetchAndPlayBlobAudio(ttsUrl, isSlow, onEndCallback);
+                });
+            }
+        } catch (_) {
+            fetchAndPlayBlobAudio(ttsUrl, isSlow, onEndCallback);
+        }
+    }
+
+    function fetchAndPlayBlobAudio(ttsUrl, isSlow, onEndCallback) {
+        GM_xmlhttpRequest({
+            method: 'GET',
+            url: ttsUrl,
+            responseType: 'blob',
+            onload: (res) => {
+                if (res.response) {
+                    const blobUrl = URL.createObjectURL(res.response);
+                    const audio = new Audio(blobUrl);
+                    if (isSlow) audio.playbackRate = 0.75;
+                    audio.onended = () => {
+                        URL.revokeObjectURL(blobUrl);
+                        if (onEndCallback) onEndCallback();
+                    };
+                    audio.onerror = () => {
+                        URL.revokeObjectURL(blobUrl);
+                        if (onEndCallback) onEndCallback();
+                    };
+                    currentAudio = audio;
+                    audio.play().catch(e => {
+                        console.warn('[GTT] Lỗi phát blob audio:', e);
+                        if (onEndCallback) onEndCallback();
+                    });
+                } else if (onEndCallback) {
+                    onEndCallback();
+                }
+            },
+            onerror: () => {
+                if (onEndCallback) onEndCallback();
+            }
+        });
+    }
+
+    function playSystemTTS(text, lang, isSlow = false, onEndCallback = null) {
+        if (!('speechSynthesis' in window)) {
+            playGoogleAudioTTS(text, lang, isSlow, onEndCallback);
+            return;
+        }
+        if (currentAudio) {
+            try { currentAudio.pause(); } catch (_) {}
+            currentAudio = null;
+        }
+        window.speechSynthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = lang;
+        utterance.rate = isSlow ? 0.6 : 1.0;
+
+        utterance.onend = () => {
+            if (onEndCallback) onEndCallback();
+        };
+        utterance.onerror = () => {
+            playGoogleAudioTTS(text, lang, isSlow, onEndCallback);
+        };
+
+        window.speechSynthesis.speak(utterance);
     }
 
     // ============================================================
@@ -697,14 +820,14 @@
             .then((results) => {
                 renderTranslationResults(results);
 
-                // Progressive IPA: Nếu bật ký âm và là từ đơn tiếng Anh chưa có phiên âm từ Google,
-                // tải ngầm bổ sung mà tuyệt đối KHÔNG chặn hiển thị popup
+                // Progressive IPA: Nếu bật ký âm và câu dưới giới hạn từ,
+                // tải ngầm bổ sung bằng Datamuse API mà tuyệt đối KHÔNG chặn hiển thị popup
                 const numWords = countWords(currentSelectedText);
                 const shouldGetIpa = getConfig('enableIpa') && numWords <= parseInt(getConfig('ipaWordLimit'), 10);
-                if (shouldGetIpa && numWords === 1 && /^[a-zA-Z'-]+$/.test(currentSelectedText)) {
+                if (shouldGetIpa) {
                     const srcIpaEl = popupEl ? popupEl.querySelector('#gtt-src-ipa') : null;
                     if (srcIpaEl && !srcIpaEl.textContent.trim()) {
-                        fetchEnglishIpa(currentSelectedText).then(ipa => {
+                        getPhoneticIpa(currentSelectedText).then(ipa => {
                             if (ipa && popupEl) {
                                 const el = popupEl.querySelector('#gtt-src-ipa');
                                 if (el) {
@@ -785,22 +908,28 @@
 
         let html = '';
 
-        // 1. DÒNG VĂN BẢN GỐC (có nút phát âm và phiên âm gốc)
+        // 1. DÒNG VĂN BẢN GỐC (có nút phát âm, nút đọc chậm và phiên âm gốc)
         html += `
             <div class="gtt-source-row">
                 <span class="gtt-lang-tag">${escapeHtml(detectedLang)}</span>
                 <span class="gtt-orig-text">${escapeHtml(currentSelectedText)}</span>
-                ${getConfig('tts') ? `<button class="gtt-tts-btn" data-tts-text="${escapeHtml(currentSelectedText)}" data-tts-lang="${escapeHtml(detectedLang)}" title="Phát âm câu gốc (${escapeHtml(detectedLang)})">${SPEAKER_ICON_SVG}</button>` : ''}
+                ${getConfig('tts') ? `
+                    <button class="gtt-tts-btn" data-tts-text="${escapeHtml(currentSelectedText)}" data-tts-lang="${escapeHtml(detectedLang)}" title="Phát âm (Bấm lại để đọc chậm)">${SPEAKER_ICON_SVG}</button>
+                    <button class="gtt-tts-btn gtt-tts-slow-btn" data-tts-text="${escapeHtml(currentSelectedText)}" data-tts-lang="${escapeHtml(detectedLang)}" data-tts-slow="true" title="Đọc chậm (0.5x)">${TURTLE_ICON_SVG}</button>
+                ` : ''}
                 <span class="gtt-ipa-subline" id="gtt-src-ipa" style="${allowIpa && srcPronounce ? 'display:block;' : 'display:none;'}">${srcPronounce ? `/${escapeHtml(srcPronounce)}/` : ''}</span>
             </div>
         `;
 
-        // 2. BẢN DỊCH CHÍNH (có nút phát âm và phiên âm bản dịch)
+        // 2. BẢN DỊCH CHÍNH (có nút phát âm, nút đọc chậm và phiên âm bản dịch)
         html += `
             <div class="gtt-translation-row">
                 <span class="gtt-lang-tag">${escapeHtml(getConfig('to'))}</span>
                 <span class="gtt-trans-text">${escapeHtml(fullTranslatedText)}</span>
-                ${getConfig('tts') ? `<button class="gtt-tts-btn" data-tts-text="${escapeHtml(fullTranslatedText)}" data-tts-lang="${escapeHtml(getConfig('to'))}" title="Phát âm bản dịch (${escapeHtml(getConfig('to'))})">${SPEAKER_ICON_SVG}</button>` : ''}
+                ${getConfig('tts') ? `
+                    <button class="gtt-tts-btn" data-tts-text="${escapeHtml(fullTranslatedText)}" data-tts-lang="${escapeHtml(getConfig('to'))}" title="Phát âm (Bấm lại để đọc chậm)">${SPEAKER_ICON_SVG}</button>
+                    <button class="gtt-tts-btn gtt-tts-slow-btn" data-tts-text="${escapeHtml(fullTranslatedText)}" data-tts-lang="${escapeHtml(getConfig('to'))}" data-tts-slow="true" title="Đọc chậm (0.5x)">${TURTLE_ICON_SVG}</button>
+                ` : ''}
                 ${allowIpa && tgtPronounce ? `<span class="gtt-ipa-subline">${escapeHtml(tgtPronounce)}</span>` : ''}
             </div>
         `;
@@ -814,7 +943,10 @@
                 <div class="gtt-translation-row" style="opacity:0.95;">
                     <span class="gtt-lang-tag">${escapeHtml(getConfig('to2'))}</span>
                     <span class="gtt-trans-text">${escapeHtml(text2)}</span>
-                    ${getConfig('tts') ? `<button class="gtt-tts-btn" data-tts-text="${escapeHtml(text2)}" data-tts-lang="${escapeHtml(getConfig('to2'))}" title="Phát âm bản dịch (${escapeHtml(getConfig('to2'))})">${SPEAKER_ICON_SVG}</button>` : ''}
+                    ${getConfig('tts') ? `
+                        <button class="gtt-tts-btn" data-tts-text="${escapeHtml(text2)}" data-tts-lang="${escapeHtml(getConfig('to2'))}" title="Phát âm (Bấm lại để đọc chậm)">${SPEAKER_ICON_SVG}</button>
+                        <button class="gtt-tts-btn gtt-tts-slow-btn" data-tts-text="${escapeHtml(text2)}" data-tts-lang="${escapeHtml(getConfig('to2'))}" data-tts-slow="true" title="Đọc chậm (0.5x)">${TURTLE_ICON_SVG}</button>
+                    ` : ''}
                     ${allowIpa && pron2 ? `<span class="gtt-ipa-subline">${escapeHtml(pron2)}</span>` : ''}
                 </div>
             `;
@@ -829,7 +961,10 @@
                 <div class="gtt-translation-row" style="opacity:0.95;">
                     <span class="gtt-lang-tag">${escapeHtml(getConfig('to3'))}</span>
                     <span class="gtt-trans-text">${escapeHtml(text3)}</span>
-                    ${getConfig('tts') ? `<button class="gtt-tts-btn" data-tts-text="${escapeHtml(text3)}" data-tts-lang="${escapeHtml(getConfig('to3'))}" title="Phát âm bản dịch (${escapeHtml(getConfig('to3'))})">${SPEAKER_ICON_SVG}</button>` : ''}
+                    ${getConfig('tts') ? `
+                        <button class="gtt-tts-btn" data-tts-text="${escapeHtml(text3)}" data-tts-lang="${escapeHtml(getConfig('to3'))}" title="Phát âm (Bấm lại để đọc chậm)">${SPEAKER_ICON_SVG}</button>
+                        <button class="gtt-tts-btn gtt-tts-slow-btn" data-tts-text="${escapeHtml(text3)}" data-tts-lang="${escapeHtml(getConfig('to3'))}" data-tts-slow="true" title="Đọc chậm (0.5x)">${TURTLE_ICON_SVG}</button>
+                    ` : ''}
                     ${allowIpa && pron3 ? `<span class="gtt-ipa-subline">${escapeHtml(pron3)}</span>` : ''}
                 </div>
             `;
@@ -927,13 +1062,34 @@
 
         bodyEl.innerHTML = html;
 
-        // Gắn sự kiện phát âm cho TẤT CẢ các nút TTS (từ gốc & các bản dịch)
+        // Gắn sự kiện phát âm: Bấm lần 1 bình thường, bấm lần 2 đọc chậm; hoặc bấm icon rùa đọc chậm trực tiếp
         bodyEl.querySelectorAll('.gtt-tts-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const text = btn.getAttribute('data-tts-text');
                 const lang = btn.getAttribute('data-tts-lang');
-                playTTS(text, lang);
+                const isExplicitSlow = btn.getAttribute('data-tts-slow') === 'true';
+
+                let isSlow = isExplicitSlow;
+                const now = Date.now();
+
+                if (!isExplicitSlow) {
+                    if (lastTtsClick.text === text && (now - lastTtsClick.time < 4500)) {
+                        isSlow = !lastTtsClick.isSlow;
+                    } else {
+                        isSlow = false;
+                    }
+                }
+
+                lastTtsClick = { text, lang, time: now, isSlow };
+
+                // Hiệu ứng animation hiển thị trạng thái đang phát
+                btn.classList.remove('gtt-playing', 'gtt-playing-slow');
+                btn.classList.add(isSlow ? 'gtt-playing-slow' : 'gtt-playing');
+
+                playTTS(text, lang, isSlow, () => {
+                    btn.classList.remove('gtt-playing', 'gtt-playing-slow');
+                });
             });
         });
 
@@ -1039,6 +1195,13 @@
                 <div class="gtt-field-row">
                     <label><input type="checkbox" id="gtt-set-tts" ${getConfig('tts') ? 'checked' : ''}/> Nút phát âm (TTS)</label>
                 </div>
+                <div class="gtt-field-row" style="margin-left: 18px; margin-top: -4px;">
+                    <label style="font-size:12px;color:#5f6368;">Nguồn phát âm:</label>
+                    <select id="gtt-set-tts-engine">
+                        <option value="google" ${getConfig('ttsEngine') === 'google' ? 'selected' : ''}>Google Translate (Chuẩn, Tự nhiên)</option>
+                        <option value="system" ${getConfig('ttsEngine') === 'system' ? 'selected' : ''}>Trình duyệt (Web Speech API)</option>
+                    </select>
+                </div>
                 <div class="gtt-field-row">
                     <label><input type="checkbox" id="gtt-set-ctrl" ${getConfig('requireCtrl') ? 'checked' : ''}/> Giữ Ctrl khi bôi đen</label>
                     <label><input type="checkbox" id="gtt-set-alt" ${getConfig('requireAlt') ? 'checked' : ''}/> Giữ Alt khi bôi đen</label>
@@ -1069,6 +1232,7 @@
             setConfig('enableIpa', document.getElementById('gtt-set-ipa').checked);
             setConfig('ipaWordLimit', parseInt(document.getElementById('gtt-set-ipa-limit').value, 10) || 5);
             setConfig('tts', document.getElementById('gtt-set-tts').checked);
+            setConfig('ttsEngine', document.getElementById('gtt-set-tts-engine').value);
             setConfig('requireCtrl', document.getElementById('gtt-set-ctrl').checked);
             setConfig('requireAlt', document.getElementById('gtt-set-alt').checked);
 

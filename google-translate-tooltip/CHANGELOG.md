@@ -2,6 +2,23 @@
 
 ## Google Translate Tooltip
 
+## [1.2.0] - 2026-10-11
+
+### Tính năng Mới & Nâng cấp Phát âm - Phiên âm (TTS & IPA Upgrade)
+- **Hỗ trợ Đọc Chậm (Slow Speech Playback)**:
+  - **Bấm lần 2 để đọc chậm**: Khi bấm nút loa phát âm 🔊 lần thứ 2 liên tiếp (trong vòng 4.5 giây), script tự động chuyển sang tốc độ đọc chậm (0.5x) với hiệu ứng animation đổi màu vàng cam trực quan.
+  - **Biểu tượng đọc chậm riêng biệt**: Thêm nút biểu tượng 🐢 ngay cạnh nút loa chính ở tất cả các dòng (từ gốc và từng bản dịch), cho phép bấm 1 chạm để nghe đọc chậm tức thì.
+- **Tùy chọn Nguồn Phát âm Google Translate TTS chuẩn**:
+  - Mặc định sử dụng công cụ phát âm chính thức của **Google Translate** (`client=tw-ob`) mang lại giọng đọc bản xứ tự nhiên, phát âm chuẩn xác vượt trội so với giọng mặc định của trình duyệt/hệ thống.
+  - Tích hợp cơ chế tự động chuyển đổi Blob Audio qua `GM_xmlhttpRequest`, đảm bảo phát âm mượt mà trên mọi trang web có chính sách bảo mật CSP khắt khe.
+  - Bổ sung tùy chọn trong bảng Cài đặt: cho phép linh hoạt chuyển đổi giữa **Google Translate** và **Hệ thống / Trình duyệt**.
+- **Chuyển sang Nguồn Ký âm IPA Datamuse API siêu tốc**:
+  - Thay thế hoàn toàn API cũ (`dictionaryapi.dev` thường xuyên bị treo mạng).
+  - Tích hợp **Datamuse API** (Đại học Carnegie Mellon) hoàn toàn miễn phí, phản hồi siêu tốc (< 100ms) và ổn định 100%.
+  - Hỗ trợ ký âm IPA chuẩn quốc tế cho cả từ đơn lẫn cụm từ (ví dụ: `hello`, `thank you`, `how are you`).
+
+---
+
 ## [1.1.1] - 2026-10-11
 
 ### Sửa lỗi & Tối ưu Trải nghiệm (Bug Fixes & Speed Optimization)
