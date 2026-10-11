@@ -4,12 +4,6 @@ package-lock.json
 node_modules/
 
 # Files & folders for reference only
-MiraTranslator/
-multi-subs-yt/
-tubelex/
-yt-dual-sub/
-*.user.js
-!userscripts/youtube-dual-subtitles.user.js
 BAO_CAO_TONG_HOP_MA_NGUON.md
 KE_HOACH_*.md
 wip
