@@ -4,6 +4,18 @@ Toàn bộ các thay đổi đáng chú ý của dự án **YouTube Dual Subtitl
 
 ---
 
+## [1.2.7] - 2026-11-15
+
+### 🛠️ Sửa lỗi & Tối ưu đồng bộ (Bug Fixes & Sync Optimization)
+- **Chặn dịch và tải phụ đề khi tính năng đang tắt:** Kiểm tra chặt chẽ `STATE.enabled` tại `handleRawTimedTextContent` và `checkPlayerCaptionsFallback`.
+- **Khắc phục lỗi hover video gợi ý tải nhầm phụ đề:** Thêm kiểm tra đối chiếu `videoId` của URL `timedtext` với video chính đang phát, ngăn chặn video preview tự động gắn phụ đề vào video hiện tại.
+- **Tối ưu đồng bộ thời gian và chọn đúng phần tử video:** Định vị chính xác `video.html5-main-video` và kiểm tra `readyState` hợp lệ trước khi tính toán timestamp, loại bỏ việc bắt nhầm thẻ preview video.
+
+### 📥 Tính năng Mới (Added)
+- **Tùy chọn vị trí dòng dịch (Translated Subtitle Position):** Bổ sung mục chọn vị trí cho phụ đề dịch (Đáy / Đỉnh video) độc lập với phụ đề gốc trong cài đặt Modal, đặc biệt hữu ích cho các video đã bị hardcode/embed phụ đề sẵn.
+
+---
+
 ## [1.2.6] - 2026-10-10
 
 ### 🛠️ Sửa delay hiển thị & Hạ ưu tiên SRT (Fixed subtitle delay & SRT lowest priority)

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Dual Subtitles Pro
 // @namespace    https://www.narga.net/
-// @version      1.2.6
+// @version      1.2.7
 // @description  Hiển thị phụ đề song ngữ (Dual Subtitles) chuẩn xác trên YouTube với DeepL API (Tùy chỉnh vị trí, font, màu sắc & ngôn ngữ)
 // @author       narga
 // @homepageURL  https://www.narga.net/
@@ -110,6 +110,7 @@
     targetLang: getInitialTargetLang(),
     showOriginal: GM_getValue('yt_dualsub_show_original', true),
     originalPosition: GM_getValue('yt_dualsub_orig_pos', 'bottom'), // 'bottom' (Stacked) | 'top' (Đỉnh video)
+    transPosition: GM_getValue('yt_dualsub_trans_pos', 'bottom'),   // 'bottom' | 'top' — vị trí dòng dịch
     fontSize: GM_getValue('yt_dualsub_font_size', 28), // mặc định 28px, chỉnh qua input
     transColor: GM_getValue('yt_dualsub_trans_color', '#fef08a'),
     deeplApiType: GM_getValue('yt_dualsub_deepl_type', 'auto'), // 'auto' | 'free' | 'pro'
@@ -635,6 +636,18 @@
     const videoId = getVideoId();
     if (!videoId || !content) return;
 
+    // BUG FIX: Không xử lý phụ đề khi plugin đang tắt
+    if (!STATE.enabled) return;
+
+    // BUG FIX: Chỉ nhận phụ đề của video ĐANG phát trên main player
+    // Khi hover video bên phải, YouTube load timedtext của video đó —
+    // ta phải bỏ qua nếu videoId trong URL timedtext khác videoId hiện tại.
+    const urlVideoId = getQueryParam(url, 'v') || getQueryParam(url, 'videoId') || '';
+    if (urlVideoId && urlVideoId !== videoId) {
+      console.log(`[YT-DualSub] Bỏ qua phụ đề video [${urlVideoId}] (đang phát: [${videoId}])`);
+      return;
+    }
+
     // Chống nhận trùng triệt để từ cả fetch, XHR lẫn fallback
     // ĐẶC BIỆT: Chỉ chặn nếu STATE.cues đã có nội dung; nếu cues đang rỗng, BẮT BUỘC phải parse!
     const signature = `${videoId}:${content.length}:${content.slice(0, 80)}`;
@@ -753,6 +766,7 @@
 
   // Fallback đọc captionTracks từ player API theo đúng thứ tự ưu tiên
   function checkPlayerCaptionsFallback(force) {
+    if (!STATE.enabled) return;  // BUG FIX: không fallback load khi plugin tắt
     if (STATE.cues.length > 0) return;
     if (!force) {
       const now = Date.now();
@@ -962,14 +976,18 @@
       this.origSubtitleEl.remove();
       this.transSubtitleEl.remove();
 
-      if (STATE.originalPosition === 'top') {
-        // Đưa câu gốc lên ĐỈNH màn hình để không làm loãng video
-        this.topContainer.appendChild(this.origSubtitleEl);
-        this.bottomContainer.appendChild(this.transSubtitleEl);
+      // Vị trí câu gốc: top = đỉnh video, bottom = đáy (Stacked)
+      const origTarget = STATE.originalPosition === 'top' ? this.topContainer : this.bottomContainer;
+      // Vị trí câu dịch: top = đỉnh video, bottom = đáy
+      const transTarget = STATE.transPosition === 'top' ? this.topContainer : this.bottomContainer;
+
+      if (origTarget === transTarget) {
+        // Cùng container: gốc trước, dịch sau
+        origTarget.appendChild(this.origSubtitleEl);
+        transTarget.appendChild(this.transSubtitleEl);
       } else {
-        // 'bottom' (Stacked) - Xếp chồng truyền thống ở đáy video
-        this.bottomContainer.appendChild(this.origSubtitleEl);
-        this.bottomContainer.appendChild(this.transSubtitleEl);
+        origTarget.appendChild(this.origSubtitleEl);
+        transTarget.appendChild(this.transSubtitleEl);
       }
     }
 
@@ -992,8 +1010,14 @@
         return;
       }
 
-      const video = (this.activePlayerEl && this.activePlayerEl.querySelector('video')) || document.querySelector('video');
+      const video = (this.activePlayerEl && this.activePlayerEl.querySelector('video.html5-main-video')) ||
+                    (this.activePlayerEl && this.activePlayerEl.querySelector('video')) ||
+                    null;
       if (!video) return;
+
+      // BUG FIX: Kiểm tra video đang thực sự phát (không phải video preview hover)
+      // readyState >= 2 (HAVE_CURRENT_DATA) và không bị paused do preview
+      if (video.readyState < 1) return;
 
       const currentMs = Math.round(video.currentTime * 1000);
 
@@ -1546,6 +1570,58 @@
     origSection.appendChild(posRow);
     modalBody.appendChild(origSection);
 
+    // 2b. Vị trí dòng DỊCH (giống cơ chế vị trí câu gốc)
+    const transPosSection = document.createElement('div');
+    const transPosTitle = document.createElement('div');
+    transPosTitle.textContent = 'VỊ TRÍ DÒNG DỊCH';
+    transPosTitle.style.cssText = `font-size:11px; font-weight:700; color:${isDark ? '#9ca3af' : '#6b7280'}; margin-bottom:8px; letter-spacing:0.5px;`;
+    transPosSection.appendChild(transPosTitle);
+
+    const transPosRow = document.createElement('div');
+    const transPosLabel = document.createElement('div');
+    transPosLabel.textContent = 'Vị trí dòng dịch (Dành cho video đã có phụ đề nhúng):';
+    transPosLabel.style.cssText = `font-size:12px; color:${isDark ? '#9ca3af' : '#6b7280'}; margin-bottom:6px;`;
+    transPosRow.appendChild(transPosLabel);
+
+    const transPosBtnGroup = document.createElement('div');
+    transPosBtnGroup.style.cssText = 'display:flex; gap:8px;';
+
+    const transPosOptions = [
+      { id: 'bottom', label: 'Đáy (Stacked)' },
+      { id: 'top', label: 'Đỉnh video (Top)' }
+    ];
+    const transPosButtons = [];
+    function refreshTransPosSelection() {
+      transPosButtons.forEach(({ btn, opt }) => {
+        const isSel = STATE.transPosition === opt.id;
+        btn.style.border = `1px solid ${isSel ? (isDark ? '#fef08a' : '#ca8a04') : (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)')}`;
+        btn.style.background = isSel
+          ? (isDark ? 'rgba(254, 240, 138, 0.22)' : 'rgba(202, 138, 4, 0.16)')
+          : (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)');
+        btn.style.color = isSel
+          ? (isDark ? '#fef08a' : '#ca8a04')
+          : (isDark ? '#d1d5db' : '#374151');
+      });
+    }
+
+    for (const opt of transPosOptions) {
+      const pBtn = document.createElement('button');
+      pBtn.textContent = opt.label;
+      pBtn.style.cssText = 'flex:1; padding:7px 10px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; transition:all 0.15s;';
+      pBtn.onclick = () => {
+        STATE.transPosition = opt.id;
+        GM_setValue('yt_dualsub_trans_pos', opt.id);
+        renderer.mountSubtitleElements();
+        refreshTransPosSelection();
+      };
+      transPosButtons.push({ btn: pBtn, opt });
+      transPosBtnGroup.appendChild(pBtn);
+    }
+    refreshTransPosSelection();
+    transPosRow.appendChild(transPosBtnGroup);
+    transPosSection.appendChild(transPosRow);
+    modalBody.appendChild(transPosSection);
+
     // 3. Cỡ chữ & Bảng màu dịch
     const styleSection = document.createElement('div');
     const styleSectionTitle = document.createElement('div');
@@ -1967,6 +2043,12 @@
 
   // Vòng lặp giám sát đảm bảo overlay và nút điều khiển luôn hiện diện trên hàng kênh
   setInterval(() => {
+    // BUG FIX: Chỉ gắn renderer vào main player (non-miniplayer, non-thumbnail),
+    // tránh trường hợp hover video bên phải khiến YouTube khởi tạo player preview
+    // và getMainPlayerElement() trả về player đó.
+    const videoId = getVideoId();
+    if (!videoId) return;
+
     const playerEl = getMainPlayerElement();
     if (playerEl && playerEl !== renderer.activePlayerEl) {
       renderer.init(playerEl);
