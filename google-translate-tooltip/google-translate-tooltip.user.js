@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.2.19
+// @version      1.2.20
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -51,7 +51,7 @@
         aiEndpoint: 'https://api.openai.com/v1/chat/completions',
         aiModel: '',
         aiApiKey: '',
-        aiPrompt: 'For each item, provide IPA for its text in the item language. The source is context only. Preserve each item id. Return only JSON: {"items":[{"id":"...","ipa":"..."}]}. Include every item.',
+        aiPrompt: 'For every item, return accurate IPA for its text in its language. Preserve each item id exactly. Return only JSON: {"items":[{"id":"#gtt-ipa-src","ipa":"..."}]}. Include every item.',
         delay: 0                   // ms độ trễ trước khi dịch lúc rê chuột vào icon
     };
 
@@ -1094,7 +1094,8 @@
                     if (response.status < 200 || response.status >= 300) return resolve([]);
                     const content = JSON.parse(response.responseText).choices?.[0]?.message?.content;
                     const parsed = typeof content === 'string' ? JSON.parse(content) : content;
-                    resolve(Array.isArray(parsed?.items) ? parsed.items : []);
+                    const list = Array.isArray(parsed) ? parsed : parsed?.items;
+                    resolve(Array.isArray(list) ? list : []);
                 } catch (_) { resolve([]); }
             },
             onerror: () => resolve([]),
@@ -1481,13 +1482,14 @@
             });
 
             if (getConfig('aiIpa')) {
-                const aiItems = itemsToCheck.filter(item => !item.source && item.lang && item.lang !== 'Disabled' && item.text);
-                fetchAiIpa(aiItems.map(item => ({ id: item.id, text: item.text, language: item.lang })), currentSelectedText, detectedLang).then(results => {
+                const aiItems = itemsToCheck.filter(item => item.lang && item.lang !== 'Disabled' && item.text);
+                fetchAiIpa(aiItems.map(item => ({ id: item.id, text: item.text, language: item.source ? detectedLang : item.lang })), currentSelectedText, detectedLang).then(results => {
                     results.forEach((result, index) => {
                         const item = aiItems.find(candidate => candidate.id === result.id) || aiItems[index];
-                        if (!item || typeof result.ipa !== 'string' || !result.ipa.trim() || !popupEl) return;
+                        const ipa = result.ipa || result.phonetic || result.transcription;
+                        if (!item || typeof ipa !== 'string' || !ipa.trim() || !popupEl) return;
                         const target = popupEl.querySelector(item.id);
-                        if (target) { target.textContent = `/${result.ipa.trim().replace(/^\/+|\/+$/g, '')}/`; target.style.display = 'block'; }
+                        if (target) { target.textContent = `/${ipa.trim().replace(/^\/+|\/+$/g, '')}/`; target.style.display = 'block'; }
                     });
                 });
             }
