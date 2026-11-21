@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.2.21
+// @version      1.2.22
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -51,7 +51,7 @@
         aiEndpoint: 'https://api.openai.com/v1/chat/completions',
         aiModel: '',
         aiApiKey: '',
-        aiPrompt: 'Give the IPA for each supplied text in its specified language. Do not translate. Return JSON with an items array. Each result must copy the input id exactly and contain ipa, e.g. {"items":[{"id":"gtt-ipa-tgt0","ipa":"/aʊt/"}]}. Include every id.',
+        aiPrompt: 'The sourceLanguage field identifies the original language. For each target, use its own language field. Return only a JSON object keyed by the supplied ids, with IPA strings as values, e.g. {"gtt-ipa-src":"/aɪ/","gtt-ipa-tgt0":"/aʊt/","gtt-ipa-tgt1":"/aʊs/","gtt-ipa-tgt2":"/fɔn/"}. Include each supplied id; omit ids not supplied.',
         delay: 0                   // ms độ trễ trước khi dịch lúc rê chuột vào icon
     };
 
@@ -1080,8 +1080,8 @@
             temperature: 0,
             messages: [
                 { role: 'system', content: prompt },
-                { role: 'system', content: 'MANDATORY OUTPUT CONTRACT: Return valid JSON only, shaped as {"items":[{"id":"exact input id","ipa":"IPA transcription"}]}. Return exactly one result for every input item. Copy ids exactly. Never omit the target-language items.' },
-                { role: 'user', content: JSON.stringify({ source: sourceText, sourceLanguage: sourceLang, items }) }
+                { role: 'system', content: 'MANDATORY OUTPUT CONTRACT: Return valid JSON only, using each input id as a top-level key and the IPA string as its value. Example: {"gtt-ipa-src":"/.../","gtt-ipa-tgt0":"/.../"}. Use sourceLanguage for the source item; use each target item language for that translation. Do not return an items array or extra text.' },
+                { role: 'user', content: JSON.stringify({ source: sourceText, sourceLanguage: sourceLang, targets: items }) }
             ],
             response_format: { type: 'json_object' }
         };
@@ -1095,8 +1095,7 @@
                     if (response.status < 200 || response.status >= 300) return resolve([]);
                     const content = JSON.parse(response.responseText).choices?.[0]?.message?.content;
                     const parsed = typeof content === 'string' ? JSON.parse(content) : content;
-                    const list = Array.isArray(parsed) ? parsed : parsed?.items;
-                    resolve(Array.isArray(list) ? list : []);
+                    resolve(parsed && typeof parsed === 'object' ? parsed : {});
                 } catch (_) { resolve([]); }
             },
             onerror: () => resolve([]),
@@ -1483,12 +1482,10 @@
             });
 
             if (getConfig('aiIpa')) {
-                const aiItems = itemsToCheck.filter(item => item.lang && item.lang !== 'Disabled' && item.text)
-                    .map((item, index) => ({ ...item, requestId: `item-${index}` }));
-                fetchAiIpa(aiItems.map(item => ({ id: item.requestId, text: item.text, language: item.lang })), currentSelectedText, detectedLang).then(results => {
-                    results.forEach(result => {
-                        const item = aiItems.find(candidate => candidate.requestId === result.id);
-                        const ipa = result.ipa || result.phonetic || result.transcription;
+                const aiItems = itemsToCheck.filter(item => item.lang && item.lang !== 'Disabled' && item.text);
+                fetchAiIpa(aiItems.map(item => ({ id: item.id.replace('#', ''), text: item.text, language: item.lang })), currentSelectedText, detectedLang).then(results => {
+                    aiItems.forEach(item => {
+                        const ipa = results[item.id.replace('#', '')];
                         if (!item || typeof ipa !== 'string' || !ipa.trim() || !popupEl) return;
                         const target = popupEl.querySelector(item.id);
                         if (target) { target.textContent = `/${ipa.trim().replace(/^\/+|\/+$/g, '')}/`; target.style.display = 'block'; }
