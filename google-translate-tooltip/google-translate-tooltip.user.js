@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.2.10
+// @version      1.2.11
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -1037,27 +1037,17 @@
         if (!data || !Array.isArray(data[0])) return '';
         const items = data[0];
 
+        // Ưu tiên dòng tổng kết (item[0] === null). item[3] ở các đoạn dịch
+        // có thể là phiên âm nguồn, không được dùng thay cho IPA đích.
         for (let i = items.length - 1; i >= 0; i--) {
             const item = items[i];
             if (!Array.isArray(item)) continue;
 
-            const primary = isSource ? item[3] : item[2];
-            const fallback = item[0] === null ? (isSource ? item[2] : item[3]) : '';
-            for (const value of [primary, fallback]) {
-                if (typeof value === 'string' && value.trim() && value !== item[0] && value !== item[1]) {
-                    return value.trim();
-                }
-            }
-        }
-
-        // Một số response đặt phiên âm trong item[3] của từng đoạn dịch.
-        for (const item of items) {
-            if (!Array.isArray(item)) continue;
-            const candidates = isSource ? [item[3]] : [item[2], item[3]];
-            for (const value of candidates) {
-                if (typeof value === 'string' && value.trim() && value !== item[0] && value !== item[1]) {
-                    return value.trim();
-                }
+            const value = item[0] === null
+                ? (isSource ? (item[3] || item[2]) : (item[2] || item[3]))
+                : (isSource ? item[3] : item[2]);
+            if (typeof value === 'string' && value.trim() && value !== item[0] && value !== item[1]) {
+                return value.trim();
             }
         }
         return '';
@@ -1468,7 +1458,7 @@
                 // Tiếng Anh: dùng Datamuse/FreeDictionary; các ngôn ngữ khác: fallback Google dt=rm
                 const ipaPromise = (item.lang === 'en')
                     ? getPhoneticIpa(item.text, item.lang)
-                    : fetchGooglePhonetics(currentSelectedText, detectedLang, item.lang);
+                    : fetchGooglePhonetics(item.text, item.lang, item.lang);
 
                 ipaPromise.then(ipa => {
                     if (ipa && popupEl) {
