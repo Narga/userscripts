@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.2.12
+// @version      1.2.13
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -865,11 +865,11 @@
         });
     }
 
-    async function fetchWordIpa(word, lang = 'en') {
+    async function fetchWordIpa(word, lang = '') {
         const clean = word.toLowerCase().trim();
         if (!clean) return '';
         // Datamuse & FreeDictionary chỉ hỗ trợ tiếng Anh — bỏ qua các ngôn ngữ khác
-        if (lang !== 'en') return '';
+        if (String(lang).toLowerCase() !== 'en') return '';
         const cacheKey = `${lang}:${clean}`;
         if (ipaCache.has(cacheKey)) return ipaCache.get(cacheKey);
 
@@ -883,9 +883,9 @@
         return ipa;
     }
 
-    async function getPhoneticIpa(text, lang = 'en') {
+    async function getPhoneticIpa(text, lang = '') {
         // Chỉ tra cứu IPA bên ngoài nếu ngôn ngữ là tiếng Anh
-        if (lang !== 'en') return '';
+        if (String(lang).toLowerCase() !== 'en') return '';
         const clean = text.toLowerCase().replace(/[^\w\s'-]/g, '').trim();
         if (!clean) return '';
         const cacheKey = `${lang}:${clean}`;
@@ -941,7 +941,8 @@
     function playTTS(text, lang, isSlow = false, onEndCallback = null) {
         if (!text) return;
         stopCurrentAudio();
-        const targetLang = (!lang || lang === 'auto') ? 'en' : lang;
+        const targetLang = lang && lang !== 'auto' ? lang : '';
+        if (!targetLang) return;
         const engine = getConfig('ttsEngine');
 
         if (engine === 'system' && 'speechSynthesis' in window) {
@@ -1180,7 +1181,9 @@
         bodyEl.style.padding = '0';
 
         const mainData = results[0];
-        let detectedLang = mainData[2] || getConfig('from');
+        // Google trả mã ngôn ngữ đã phát hiện ở data[2] khi sl=auto.
+        // Không dùng ngôn ngữ cấu hình làm fallback, vì có thể biến Auto thành English.
+        const detectedLang = mainData[2] || 'auto';
         let fullTranslatedText = '';
 
         if (mainData[0] && Array.isArray(mainData[0])) {
