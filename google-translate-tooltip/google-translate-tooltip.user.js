@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.2.11
+// @version      1.2.12
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -1388,7 +1388,8 @@
             reverseBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const targetLang = getConfig('to');
-                const sourceLang = detectedLang && detectedLang !== 'auto' ? detectedLang : 'en';
+                const sourceLang = detectedLang && detectedLang !== 'auto' ? detectedLang : '';
+                if (!sourceLang || !targetLang || targetLang === 'Disabled') return;
                 setConfig('from', targetLang);
                 setConfig('to', sourceLang);
                 currentSelectedText = fullTranslatedText;
