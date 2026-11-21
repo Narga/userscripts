@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.2.17
+// @version      1.2.18
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -1464,11 +1464,11 @@
             }
 
             itemsToCheck.forEach(item => {
-                if (!item.text || item.hasPron || countWords(item.text) > limit) return;
+                if (!item.text || countWords(item.text) > limit) return;
                 const el = bodyEl.querySelector(item.id);
                 if (!el) return;
-                if (getConfig('aiIpa') && item.lang !== 'en') return;
-                if (!getConfig('aiIpa') && item.lang !== 'en') return;
+                if (getConfig('aiIpa')) return;
+                if (item.hasPron || item.lang !== 'en') return;
                 getPhoneticIpa(item.text).then(ipa => {
                     if (ipa && popupEl) {
                         const targetEl = popupEl.querySelector(item.id);
@@ -1481,10 +1481,10 @@
             });
 
             if (getConfig('aiIpa')) {
-                const aiItems = itemsToCheck.filter(item => !item.hasPron && item.lang && item.lang !== 'en' && item.text && countWords(item.text) <= limit);
+                const aiItems = itemsToCheck.filter(item => !item.source && item.lang && item.lang !== 'auto' && item.text && countWords(item.text) <= limit);
                 fetchAiIpa(aiItems.map(item => ({ text: item.text, language: item.lang })), currentSelectedText, detectedLang).then(results => {
                     results.forEach((result, index) => {
-                        const item = aiItems.find(candidate => candidate.text === result.text) || aiItems[index];
+                        const item = aiItems.find(candidate => candidate.text === result.text && candidate.lang === result.language) || aiItems[index];
                         if (!item || typeof result.ipa !== 'string' || !result.ipa.trim() || !popupEl) return;
                         const target = popupEl.querySelector(item.id);
                         if (target) { target.textContent = `/${result.ipa.trim().replace(/^\/+|\/+$/g, '')}/`; target.style.display = 'block'; }
