@@ -835,6 +835,30 @@
         return '';
     }
 
+    // Fallback: gọi Google riêng để lấy phiên âm (dt=rm) khi extractPhonetics trả rỗng
+    function fetchGooglePhonetics(text, sl, tl) {
+        return new Promise((resolve) => {
+            const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=rm&dt=t&q=${encodeURIComponent(text)}`;
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: url,
+                timeout: 3000,
+                headers: { 'Accept': 'application/json' },
+                onload: (resp) => {
+                    if (resp.status >= 200 && resp.status < 300) {
+                        try {
+                            const data = JSON.parse(resp.responseText);
+                            const tgtPron = extractPhonetics(data, false);
+                            resolve(tgtPron || '');
+                        } catch (_) { resolve(''); }
+                    } else { resolve(''); }
+                },
+                ontimeout: () => resolve(''),
+                onerror: () => resolve('')
+            });
+        });
+    }
+
     // ============================================================
     // POPUP RENDERING (Hiển thị tức thời, không nghẽn luồng)
     // ============================================================
@@ -1107,16 +1131,16 @@
         if (allowIpa) {
             const limit = parseInt(getConfig('ipaWordLimit'), 10) || 5;
             const itemsToCheck = [
-                { id: '#gtt-ipa-src', text: currentSelectedText, lang: detectedLang, hasPron: Boolean(srcPronounce) },
-                { id: '#gtt-ipa-tgt0', text: fullTranslatedText, lang: getConfig('to'), hasPron: Boolean(tgtPronounce) }
+                { id: '#gtt-ipa-src', text: currentSelectedText, lang: detectedLang, hasPron: Boolean(srcPronounce), isSource: true },
+                { id: '#gtt-ipa-tgt0', text: fullTranslatedText, lang: getConfig('to'), hasPron: Boolean(tgtPronounce), isSource: false }
             ];
             if (results[1]) {
                 const text2 = results[1][0] ? results[1][0].map(item => item[0]).filter(Boolean).join('') : '';
-                itemsToCheck.push({ id: '#gtt-ipa-tgt1', text: text2, lang: getConfig('to2'), hasPron: Boolean(pron2) });
+                itemsToCheck.push({ id: '#gtt-ipa-tgt1', text: text2, lang: getConfig('to2'), hasPron: Boolean(pron2), isSource: false });
             }
             if (results[2]) {
                 const text3 = results[2][0] ? results[2][0].map(item => item[0]).filter(Boolean).join('') : '';
-                itemsToCheck.push({ id: '#gtt-ipa-tgt2', text: text3, lang: getConfig('to3'), hasPron: Boolean(pron3) });
+                itemsToCheck.push({ id: '#gtt-ipa-tgt2', text: text3, lang: getConfig('to3'), hasPron: Boolean(pron3), isSource: false });
             }
 
             itemsToCheck.forEach(item => {
@@ -1124,7 +1148,12 @@
                 const el = bodyEl.querySelector(item.id);
                 if (!el) return;
 
-                getPhoneticIpa(item.text, item.lang).then(ipa => {
+                // Tiếng Anh: dùng Datamuse/FreeDictionary; các ngôn ngữ khác: fallback Google dt=rm
+                const ipaPromise = (item.lang === 'en')
+                    ? getPhoneticIpa(item.text, item.lang)
+                    : fetchGooglePhonetics(item.text, item.isSource ? item.lang : detectedLang, item.isSource ? getConfig('to') : item.lang);
+
+                ipaPromise.then(ipa => {
                     if (ipa && popupEl) {
                         const targetEl = popupEl.querySelector(item.id);
                         if (targetEl) {
