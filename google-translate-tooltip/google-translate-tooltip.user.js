@@ -653,9 +653,11 @@
         });
     }
 
-    async function fetchWordIpa(word) {
+    async function fetchWordIpa(word, lang = 'en') {
         const clean = word.toLowerCase().trim();
         if (!clean) return '';
+        // Datamuse & FreeDictionary chỉ hỗ trợ tiếng Anh — bỏ qua các ngôn ngữ khác
+        if (lang !== 'en') return '';
         if (ipaCache.has(clean)) return ipaCache.get(clean);
 
         let ipa = await fetchDatamuseSingle(clean);
@@ -668,7 +670,9 @@
         return ipa;
     }
 
-    async function getPhoneticIpa(text) {
+    async function getPhoneticIpa(text, lang = 'en') {
+        // Chỉ tra cứu IPA bên ngoài nếu ngôn ngữ là tiếng Anh
+        if (lang !== 'en') return '';
         const clean = text.toLowerCase().replace(/[^\w\s'-]/g, '').trim();
         if (!clean) return '';
         if (ipaCache.has(clean)) return ipaCache.get(clean);
@@ -679,7 +683,7 @@
             const words = clean.split(/\s+/).filter(Boolean);
             if (words.length <= parseInt(getConfig('ipaWordLimit'), 10)) {
                 const parts = await Promise.all(words.map(async w => {
-                    const wIpa = await fetchWordIpa(w);
+                    const wIpa = await fetchWordIpa(w, lang);
                     return wIpa || w;
                 }));
                 if (parts.some((p, idx) => p !== words[idx])) {
@@ -687,7 +691,7 @@
                 }
             }
         } else {
-            ipa = await fetchWordIpa(clean);
+            ipa = await fetchWordIpa(clean, lang);
         }
 
         if (ipa) {
@@ -1102,16 +1106,16 @@
         if (allowIpa) {
             const limit = parseInt(getConfig('ipaWordLimit'), 10) || 5;
             const itemsToCheck = [
-                { id: '#gtt-ipa-src', text: currentSelectedText, hasPron: Boolean(srcPronounce) },
-                { id: '#gtt-ipa-tgt0', text: fullTranslatedText, hasPron: Boolean(tgtPronounce) }
+                { id: '#gtt-ipa-src', text: currentSelectedText, lang: detectedLang, hasPron: Boolean(srcPronounce) },
+                { id: '#gtt-ipa-tgt0', text: fullTranslatedText, lang: getConfig('to'), hasPron: Boolean(tgtPronounce) }
             ];
             if (results[1]) {
                 const text2 = results[1][0] ? results[1][0].map(item => item[0]).filter(Boolean).join('') : '';
-                itemsToCheck.push({ id: '#gtt-ipa-tgt1', text: text2, hasPron: Boolean(pron2) });
+                itemsToCheck.push({ id: '#gtt-ipa-tgt1', text: text2, lang: getConfig('to2'), hasPron: Boolean(pron2) });
             }
             if (results[2]) {
                 const text3 = results[2][0] ? results[2][0].map(item => item[0]).filter(Boolean).join('') : '';
-                itemsToCheck.push({ id: '#gtt-ipa-tgt2', text: text3, hasPron: Boolean(pron3) });
+                itemsToCheck.push({ id: '#gtt-ipa-tgt2', text: text3, lang: getConfig('to3'), hasPron: Boolean(pron3) });
             }
 
             itemsToCheck.forEach(item => {
@@ -1119,7 +1123,7 @@
                 const el = bodyEl.querySelector(item.id);
                 if (!el) return;
 
-                getPhoneticIpa(item.text).then(ipa => {
+                getPhoneticIpa(item.text, item.lang).then(ipa => {
                     if (ipa && popupEl) {
                         const targetEl = popupEl.querySelector(item.id);
                         if (targetEl) {
