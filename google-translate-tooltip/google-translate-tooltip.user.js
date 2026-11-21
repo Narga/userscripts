@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.2.9
+// @version      1.2.10
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -1036,12 +1036,28 @@
     function extractPhonetics(data, isSource = false) {
         if (!data || !Array.isArray(data[0])) return '';
         const items = data[0];
+
         for (let i = items.length - 1; i >= 0; i--) {
             const item = items[i];
             if (!Array.isArray(item)) continue;
-            const val = isSource ? (item[3] || (item[0] === null ? item[2] : '')) : (item[2] || (item[0] === null ? item[3] : ''));
-            if (typeof val === 'string' && val.trim() && val !== item[0] && val !== item[1]) {
-                return val.trim();
+
+            const primary = isSource ? item[3] : item[2];
+            const fallback = item[0] === null ? (isSource ? item[2] : item[3]) : '';
+            for (const value of [primary, fallback]) {
+                if (typeof value === 'string' && value.trim() && value !== item[0] && value !== item[1]) {
+                    return value.trim();
+                }
+            }
+        }
+
+        // Một số response đặt phiên âm trong item[3] của từng đoạn dịch.
+        for (const item of items) {
+            if (!Array.isArray(item)) continue;
+            const candidates = isSource ? [item[3]] : [item[2], item[3]];
+            for (const value of candidates) {
+                if (typeof value === 'string' && value.trim() && value !== item[0] && value !== item[1]) {
+                    return value.trim();
+                }
             }
         }
         return '';
@@ -1452,7 +1468,7 @@
                 // Tiếng Anh: dùng Datamuse/FreeDictionary; các ngôn ngữ khác: fallback Google dt=rm
                 const ipaPromise = (item.lang === 'en')
                     ? getPhoneticIpa(item.text, item.lang)
-                    : fetchGooglePhonetics(item.text, item.isSource ? item.lang : detectedLang, item.isSource ? getConfig('to') : item.lang);
+                    : fetchGooglePhonetics(currentSelectedText, detectedLang, item.lang);
 
                 ipaPromise.then(ipa => {
                     if (ipa && popupEl) {
