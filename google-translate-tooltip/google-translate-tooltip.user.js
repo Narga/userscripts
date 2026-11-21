@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.2.8
+// @version      1.2.9
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -668,7 +668,7 @@
     // ============================================================
     // TRANSLATION API (client=gtx đầy đủ thông tin từ điển)
     // dt=t (bản dịch), dt=bd (từ điển), dt=rm (phiên âm romaji/pinyin/latin),
-    // dt=at (bản dịch thay thế), dt=md (định nghĩa), dt=ss (từ đồng nghĩa)
+    // dt=at (bản dịch thay thế), dt=md (định nghĩa), dt=ss (từ đồng nghĩa), dt=ex (ví dụ)
     // ============================================================
     const TRANSLATION_CACHE_KEY = 'gtt_translation_cache_v1';
     const MAX_TRANSLATION_CACHE_ENTRIES = 120;
@@ -732,7 +732,7 @@
                 }
             };
             const encodedText = encodeURIComponent(text);
-            const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&dt=bd&dt=rm&dt=at&dt=md&dt=ss&q=${encodedText}`;
+            const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&dt=bd&dt=rm&dt=at&dt=md&dt=ss&dt=ex&q=${encodedText}`;
 
             GM_xmlhttpRequest({
                 method: 'GET',
@@ -1047,6 +1047,21 @@
         return '';
     }
 
+    function extractExampleSentences(data) {
+        const examples = [];
+        const visit = (node) => {
+            if (!Array.isArray(node)) return;
+            if (typeof node[0] === 'string') {
+                const text = node[0].replace(/<[^>]*>/g, '').trim();
+                if (text && !examples.includes(text)) examples.push(text);
+            }
+            node.forEach(visit);
+        };
+
+        visit(data && data[13]);
+        return examples.slice(0, 3);
+    }
+
     // Fallback: gọi Google riêng để lấy phiên âm (dt=rm) khi extractPhonetics trả rỗng
     function fetchGooglePhonetics(text, sl, tl) {
         return new Promise((resolve) => {
@@ -1314,6 +1329,15 @@
                     <div style="color:#5f6368;font-size:12px;">Đang tải...</div>
                 </div>
             `;
+        }
+
+        const examples = extractExampleSentences(mainData);
+        if (examples.length) {
+            detailsHtml += `<div class="gtt-examples-block"><div class="gtt-section-title">Ví dụ câu</div>`;
+            examples.forEach(example => {
+                detailsHtml += `<div class="gtt-dict-terms" style="font-style:italic;margin-bottom:3px;">“${escapeHtml(example)}”</div>`;
+            });
+            detailsHtml += '</div>';
         }
 
         // Tích hợp toggle chi tiết
