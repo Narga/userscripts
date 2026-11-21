@@ -45,6 +45,7 @@
         theme: 'light',            // light hoặc dark
         requireCtrl: false,
         requireAlt: false,
+        hotkey: '',                // Phím tắt dịch nhanh (vd: 'KeyQ', 'KeyT', 'F2')
         delay: 0                   // ms độ trễ trước khi dịch lúc rê chuột vào icon
     };
 
@@ -1399,6 +1400,13 @@
                     <label><input type="checkbox" id="gtt-set-ctrl" ${getConfig('requireCtrl') ? 'checked' : ''}/> Giữ Ctrl khi bôi đen</label>
                     <label><input type="checkbox" id="gtt-set-alt" ${getConfig('requireAlt') ? 'checked' : ''}/> Giữ Alt khi bôi đen</label>
                 </div>
+                <div class="gtt-field-row">
+                    <label>Phím tắt dịch nhanh:</label>
+                    <div style="display:flex;align-items:center;gap:4px;">
+                        <input type="text" id="gtt-set-hotkey" value="${escapeHtml(getConfig('hotkey') || '')}" placeholder="Bấm phím..." readonly style="width:90px;text-align:center;cursor:pointer;" title="Bôi đen văn bản rồi bấm phím này để dịch nhanh."/>
+                        <button type="button" id="gtt-btn-clear-hotkey" class="gtt-btn-secondary" style="font-size:11px;padding:2px 5px;">Xóa</button>
+                    </div>
+                </div>
 
                 <div class="gtt-settings-footer">
                     <button class="gtt-btn-secondary" id="gtt-btn-cancel">Hủy</button>
@@ -1406,6 +1414,18 @@
                 </div>
             </div>
         `;
+
+        const hotkeyInput = document.getElementById('gtt-set-hotkey');
+        hotkeyInput.addEventListener('keydown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.key !== 'Escape' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                hotkeyInput.value = e.code;
+            }
+        });
+        document.getElementById('gtt-btn-clear-hotkey').addEventListener('click', () => {
+            hotkeyInput.value = '';
+        });
 
         document.getElementById('gtt-btn-cancel').addEventListener('click', () => {
             isShowingSettings = false;
@@ -1429,6 +1449,7 @@
             setConfig('slowSpeed', document.getElementById('gtt-set-slow-speed').value);
             setConfig('requireCtrl', document.getElementById('gtt-set-ctrl').checked);
             setConfig('requireAlt', document.getElementById('gtt-set-alt').checked);
+            setConfig('hotkey', hotkeyInput.value.trim());
 
             isShowingSettings = false;
             startLookup(parseInt(popupEl.style.left, 10), parseInt(popupEl.style.top, 10));
@@ -1479,5 +1500,33 @@
     // ============================================================
     document.addEventListener('mouseup', onMouseUp, false);
     document.addEventListener('mousedown', onMouseDown, false);
+
+    // Phím tắt tùy chỉnh: dịch nhanh văn bản đang chọn
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && popupEl) {
+            isPinned = false;
+            removePopup();
+            return;
+        }
+
+        const hotkey = getConfig('hotkey');
+        if (!hotkey || e.repeat || e.code !== hotkey) return;
+
+        const text = getSelectedText();
+        if (!text) return;
+
+        e.preventDefault();
+        currentSelectedText = text;
+        const sel = window.getSelection();
+        const activeEl = document.activeElement;
+        const rect = sel && sel.rangeCount > 0
+            ? sel.getRangeAt(0).getBoundingClientRect()
+            : activeEl && typeof activeEl.getBoundingClientRect === 'function'
+                ? activeEl.getBoundingClientRect()
+                : null;
+        if (rect) {
+            startLookup(rect.left + window.scrollX, rect.bottom + window.scrollY + 5);
+        }
+    }, false);
 
 })();
