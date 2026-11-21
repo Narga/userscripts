@@ -90,7 +90,7 @@ Hiển thị tooltip dịch tức thì kèm phát âm (Text-to-Speech) và đị
 - **Script cài đặt:** [`google-translate-tooltip.user.js`](google-translate-tooltip/google-translate-tooltip.user.js)
 - **Lịch sử thay đổi:** [Xem CHANGELOG](google-translate-tooltip/CHANGELOG.md)
 
-### Tính năng chính (v1.0.0)
+### Tính năng chính (v1.3.0)
 - ✅ Bôi đen văn bản hiện icon Google Translate nhỏ gọn, bấm hoặc hover để hiển thị bản dịch.
 - ✅ Sử dụng Google Translate API (`client=gtx`) trực tiếp, không phụ thuộc token cũ, không lo lỗi kết nối.
 - ✅ Tích hợp phát âm (TTS) mượt mà qua Web Speech API / Google Audio.
@@ -98,6 +98,11 @@ Hiển thị tooltip dịch tức thì kèm phát âm (Text-to-Speech) và đị
 - ✅ Xem chi tiết từ điển (từ loại, từ đồng nghĩa) cho các từ đơn.
 - ✅ Giao diện thẻ nổi hiện đại, hỗ trợ cả Light Mode và Dark Mode, hỗ trợ kéo thả vị trí (drag & drop).
 - ✅ Tùy chọn phím bổ trợ: Chỉ kích hoạt khi giữ phím `Ctrl` hoặc `Alt`.
+- ✅ Hỗ trợ IPA bằng AI tương thích OpenAI: endpoint, model, API key và prompt do người dùng cấu hình, lưu trong userscript storage.
+- ✅ Tải danh sách model từ provider; kết quả IPA được ghép trực tiếp theo ID từng dòng nguồn/bản dịch.
+- ✅ Có nút khôi phục prompt mặc định; phần xem request/response chỉ hiện khi bật Debug.
+- ✅ Có cache dịch offline, đảo chiều dịch, phím tắt tùy chỉnh, ghim popup, sao chép nhanh, từ liên quan và ví dụ câu.
+- ℹ️ Để dùng Groq, nhập endpoint chat completions tương thích OpenAI, ví dụ `https://api.groq.com/openai/v1/chat/completions`, sau đó tải model, nhập API key và bật AI IPA.
 
 ---
 

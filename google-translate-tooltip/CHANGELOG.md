@@ -2,6 +2,17 @@
 
 ## Google Translate Tooltip
 
+## [1.3.0] - 2026-11-21
+
+### AI IPA and settings updates
+- Added optional OpenAI-compatible IPA lookup with locally stored endpoint, model, API key, and editable prompt.
+- Added provider model discovery, keyed JSON output mapping, and request/response diagnostics that are hidden unless Debug is enabled.
+- Added a one-click reset to the default IPA prompt.
+- Corrected target IPA handling so the AI receives source language and each translated row's own language, then applies returned IPA by row ID.
+- Added quick copy, popup pinning, custom hotkey, reverse translation, offline translation cache, related words, and example sentences in the 1.2.x update line.
+- Removed the unreliable Google `dt=rm` fallback that could repeat source phonetics across target languages.
+
+
 ## [1.2.4] - 2026-10-11
 
 ### Tối giản & Tinh gọn Mã nguồn (Simplification, Zero-Overhead & Streamlined Phonetics)

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.2.23
+// @version      1.3.0
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -51,6 +51,7 @@
         aiEndpoint: 'https://api.openai.com/v1/chat/completions',
         aiModel: '',
         aiApiKey: '',
+        aiDebug: false,
         aiPrompt: 'The sourceLanguage field identifies the original language. For each target, use its own language field. Return only a JSON object keyed by the supplied ids, with IPA strings as values, e.g. {"gtt-ipa-src":"/aɪ/","gtt-ipa-tgt0":"/aʊt/","gtt-ipa-tgt1":"/aʊs/","gtt-ipa-tgt2":"/fɔn/"}. Include each supplied id; omit ids not supplied.',
         delay: 0                   // ms độ trễ trước khi dịch lúc rê chuột vào icon
     };
@@ -1630,10 +1631,10 @@
                     <label><input type="checkbox" id="gtt-set-ai-ipa" ${getConfig('aiIpa') ? 'checked' : ''}/> Dùng AI bổ sung IPA</label>
                 </div>
                 <div class="gtt-field-row"><label>OpenAI API endpoint:</label><input type="text" id="gtt-set-ai-endpoint" value="${escapeHtml(getConfig('aiEndpoint'))}" style="width:220px;"/></div>
-                <div class="gtt-field-row"><label>Model:</label><select id="gtt-set-ai-model" style="max-width:210px;"><option value="${escapeHtml(getConfig('aiModel'))}">${escapeHtml(getConfig('aiModel') || 'Tải model để chọn')}</option></select><button type="button" id="gtt-btn-load-models" class="gtt-btn-secondary" title="Tải danh sách model">↻</button><span id="gtt-model-status" style="font-size:11px;"></span></div>
+                <div class="gtt-field-row"><label>Model:</label><button type="button" id="gtt-btn-load-models" class="gtt-btn-secondary" title="Tải danh sách model">↻</button><select id="gtt-set-ai-model" style="max-width:210px;margin-left:auto;text-align:right;"><option value="${escapeHtml(getConfig('aiModel'))}">${escapeHtml(getConfig('aiModel') || 'Tải model để chọn')}</option></select><span id="gtt-model-status" style="font-size:11px;"></span></div>
                 <div class="gtt-field-row"><label>API key:</label><input type="password" id="gtt-set-ai-key" value="${escapeHtml(getConfig('aiApiKey'))}" autocomplete="off" style="width:180px;"/></div>
-                <div class="gtt-field-row"><label>Prompt:</label><div style="width:100%;"><textarea id="gtt-set-ai-prompt" rows="4" style="width:100%;">${escapeHtml(getConfig('aiPrompt'))}</textarea><button type="button" id="gtt-btn-reset-ai-prompt" class="gtt-btn-secondary" style="margin-top:4px;">Prompt mặc định</button></div></div>
-                <div class="gtt-field-row"><label>Request/response AI gần nhất:</label><textarea id="gtt-ai-debug" rows="8" readonly style="width:100%;font-family:monospace;font-size:10px;">${escapeHtml(lastAiExchange)}</textarea><button type="button" id="gtt-btn-refresh-ai-debug" class="gtt-btn-secondary">Tải lại</button></div>
+                <div class="gtt-field-row" style="display:block;"><div style="display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-bottom:4px;"><button type="button" id="gtt-btn-reset-ai-prompt" class="gtt-btn-secondary">Prompt mặc định</button><label>Prompt:</label></div><textarea id="gtt-set-ai-prompt" rows="4" style="width:100%;">${escapeHtml(getConfig('aiPrompt'))}</textarea></div>
+                <div class="gtt-field-row" style="display:block;"><div style="display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-bottom:4px;"><button type="button" id="gtt-btn-refresh-ai-debug" class="gtt-btn-secondary">Tải lại</button><label>Request/response AI gần nhất:</label><label style="margin-left:auto;"><input type="checkbox" id="gtt-set-ai-debug" ${getConfig('aiDebug') ? 'checked' : ''}/> Debug</label></div><textarea id="gtt-ai-debug" rows="8" readonly style="width:100%;font-family:monospace;font-size:10px;display:${getConfig('aiDebug') ? 'block' : 'none'};">${escapeHtml(lastAiExchange)}</textarea></div>
 
                 <div class="gtt-settings-footer">
                     <button class="gtt-btn-secondary" id="gtt-btn-cancel">Hủy</button>
@@ -1658,6 +1659,11 @@
         });
         document.getElementById('gtt-btn-refresh-ai-debug').addEventListener('click', () => {
             document.getElementById('gtt-ai-debug').value = lastAiExchange;
+        });
+        document.getElementById('gtt-set-ai-debug').addEventListener('change', (e) => {
+            const debug = document.getElementById('gtt-ai-debug');
+            debug.style.display = e.target.checked ? 'block' : 'none';
+            setConfig('aiDebug', e.target.checked);
         });
 
         document.getElementById('gtt-btn-load-models').addEventListener('click', () => {
@@ -1711,6 +1717,7 @@
             setConfig('requireAlt', document.getElementById('gtt-set-alt').checked);
             setConfig('hotkey', hotkeyInput.value.trim());
             setConfig('aiIpa', document.getElementById('gtt-set-ai-ipa').checked);
+            setConfig('aiDebug', document.getElementById('gtt-set-ai-debug').checked);
             setConfig('aiEndpoint', document.getElementById('gtt-set-ai-endpoint').value.trim());
             setConfig('aiModel', document.getElementById('gtt-set-ai-model').value.trim());
             setConfig('aiApiKey', document.getElementById('gtt-set-ai-key').value.trim());
