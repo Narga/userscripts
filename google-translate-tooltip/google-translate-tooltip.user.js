@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.2.15
+// @version      1.2.16
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -17,6 +17,7 @@
 // @connect      translate.google.com
 // @connect      api.datamuse.com
 // @connect      api.dictionaryapi.dev
+// @connect      api.openai.com
 // @license      MIT
 // @downloadURL  https://raw.githubusercontent.com/Narga/userscripts/refs/heads/main/google-translate-tooltip/google-translate-tooltip.user.js
 // @updateURL    https://raw.githubusercontent.com/Narga/userscripts/refs/heads/main/google-translate-tooltip/google-translate-tooltip.user.js
@@ -46,6 +47,11 @@
         requireCtrl: false,
         requireAlt: false,
         hotkey: '',                // Phím tắt dịch nhanh (vd: 'KeyQ', 'KeyT', 'F2')
+        aiIpa: false,
+        aiEndpoint: 'https://api.openai.com/v1/chat/completions',
+        aiModel: '',
+        aiApiKey: '',
+        aiPrompt: 'For each item, return its text unchanged and accurate IPA for the specified language. Use the source text only as context. Return JSON: {"items":[{"text":"...","ipa":"..."}]}. No extra text.',
         delay: 0                   // ms độ trễ trước khi dịch lúc rê chuột vào icon
     };
 
@@ -1062,6 +1068,40 @@
         return examples.slice(0, 3);
     }
 
+    function fetchAiIpa(items, sourceText, sourceLang) {
+        const endpoint = String(getConfig('aiEndpoint') || '').trim();
+        const model = String(getConfig('aiModel') || '').trim();
+        const apiKey = String(getConfig('aiApiKey') || '').trim();
+        if (!endpoint || !model || !apiKey || !items.length) return Promise.resolve([]);
+
+        const prompt = String(getConfig('aiPrompt') || DEFAULT_CONFIG.aiPrompt);
+        const payload = {
+            model,
+            temperature: 0,
+            messages: [
+                { role: 'system', content: prompt },
+                { role: 'user', content: JSON.stringify({ source: sourceText, sourceLanguage: sourceLang, items }) }
+            ],
+            response_format: { type: 'json_object' }
+        };
+
+        return new Promise(resolve => GM_xmlhttpRequest({
+            method: 'POST', url: endpoint, timeout: 20000,
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+            data: JSON.stringify(payload),
+            onload: response => {
+                try {
+                    if (response.status < 200 || response.status >= 300) return resolve([]);
+                    const content = JSON.parse(response.responseText).choices?.[0]?.message?.content;
+                    const parsed = typeof content === 'string' ? JSON.parse(content) : content;
+                    resolve(Array.isArray(parsed?.items) ? parsed.items : []);
+                } catch (_) { resolve([]); }
+            },
+            onerror: () => resolve([]),
+            ontimeout: () => resolve([])
+        }));
+    }
+
     // ============================================================
     // POPUP RENDERING (Hiển thị tức thời, không nghẽn luồng)
     // ============================================================
@@ -1411,7 +1451,7 @@
         if (allowIpa) {
             const limit = parseInt(getConfig('ipaWordLimit'), 10) || 5;
             const itemsToCheck = [
-                { id: '#gtt-ipa-src', text: currentSelectedText, lang: detectedLang, hasPron: Boolean(srcPronounce) },
+                { id: '#gtt-ipa-src', text: currentSelectedText, lang: detectedLang, hasPron: Boolean(srcPronounce), source: true },
                 { id: '#gtt-ipa-tgt0', text: fullTranslatedText, lang: getConfig('to'), hasPron: Boolean(tgtPronounce) }
             ];
             if (results[1]) {
@@ -1424,10 +1464,11 @@
             }
 
             itemsToCheck.forEach(item => {
-                if (!item.text || item.hasPron || item.lang !== 'en' || countWords(item.text) > limit) return;
+                if (!item.text || item.hasPron || countWords(item.text) > limit) return;
                 const el = bodyEl.querySelector(item.id);
                 if (!el) return;
-
+                if (getConfig('aiIpa') && item.lang !== 'en') return;
+                if (!getConfig('aiIpa') && item.lang !== 'en') return;
                 getPhoneticIpa(item.text).then(ipa => {
                     if (ipa && popupEl) {
                         const targetEl = popupEl.querySelector(item.id);
@@ -1438,6 +1479,18 @@
                     }
                 });
             });
+
+            if (getConfig('aiIpa')) {
+                const aiItems = itemsToCheck.filter(item => !item.hasPron && item.lang && item.lang !== 'en' && item.text && countWords(item.text) <= limit);
+                fetchAiIpa(aiItems.map(item => ({ text: item.text, language: item.lang })), currentSelectedText, detectedLang).then(results => {
+                    results.forEach((result, index) => {
+                        const item = aiItems.find(candidate => candidate.text === result.text) || aiItems[index];
+                        if (!item || typeof result.ipa !== 'string' || !result.ipa.trim() || !popupEl) return;
+                        const target = popupEl.querySelector(item.id);
+                        if (target) { target.textContent = `/${result.ipa.trim().replace(/^\/+|\/+$/g, '')}/`; target.style.display = 'block'; }
+                    });
+                });
+            }
         }
 
         // Listener toggle chi tiết
@@ -1569,6 +1622,13 @@
                         <button type="button" id="gtt-btn-clear-hotkey" class="gtt-btn-secondary" style="font-size:11px;padding:2px 5px;">Xóa</button>
                     </div>
                 </div>
+                <div class="gtt-field-row" style="border-top:1px dashed var(--gtt-border, #dadce0);padding-top:6px;">
+                    <label><input type="checkbox" id="gtt-set-ai-ipa" ${getConfig('aiIpa') ? 'checked' : ''}/> Dùng AI bổ sung IPA</label>
+                </div>
+                <div class="gtt-field-row"><label>OpenAI API endpoint:</label><input type="text" id="gtt-set-ai-endpoint" value="${escapeHtml(getConfig('aiEndpoint'))}" style="width:220px;"/></div>
+                <div class="gtt-field-row"><label>Model:</label><input type="text" id="gtt-set-ai-model" value="${escapeHtml(getConfig('aiModel'))}" style="width:140px;"/></div>
+                <div class="gtt-field-row"><label>API key:</label><input type="password" id="gtt-set-ai-key" value="${escapeHtml(getConfig('aiApiKey'))}" autocomplete="off" style="width:180px;"/></div>
+                <div class="gtt-field-row"><label>Prompt:</label><textarea id="gtt-set-ai-prompt" rows="3" style="width:100%;">${escapeHtml(getConfig('aiPrompt'))}</textarea></div>
 
                 <div class="gtt-settings-footer">
                     <button class="gtt-btn-secondary" id="gtt-btn-cancel">Hủy</button>
@@ -1612,6 +1672,11 @@
             setConfig('requireCtrl', document.getElementById('gtt-set-ctrl').checked);
             setConfig('requireAlt', document.getElementById('gtt-set-alt').checked);
             setConfig('hotkey', hotkeyInput.value.trim());
+            setConfig('aiIpa', document.getElementById('gtt-set-ai-ipa').checked);
+            setConfig('aiEndpoint', document.getElementById('gtt-set-ai-endpoint').value.trim());
+            setConfig('aiModel', document.getElementById('gtt-set-ai-model').value.trim());
+            setConfig('aiApiKey', document.getElementById('gtt-set-ai-key').value.trim());
+            setConfig('aiPrompt', document.getElementById('gtt-set-ai-prompt').value.trim());
 
             isShowingSettings = false;
             startLookup(parseInt(popupEl.style.left, 10), parseInt(popupEl.style.top, 10));
