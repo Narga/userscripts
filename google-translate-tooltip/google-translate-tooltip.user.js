@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.2.14
+// @version      1.2.15
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -1038,9 +1038,8 @@
             const item = items[i];
             if (!Array.isArray(item)) continue;
 
-            const value = item[0] === null
-                ? (isSource ? (item[3] || item[2]) : (item[2] || item[3]))
-                : (isSource ? item[3] : item[2]);
+            if (item[0] !== null) continue;
+            const value = isSource ? (item[3] || item[2]) : item[2];
             if (typeof value === 'string' && value.trim() && value !== item[0] && value !== item[1]) {
                 return value.trim();
             }
