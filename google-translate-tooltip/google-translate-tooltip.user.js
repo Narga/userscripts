@@ -303,6 +303,34 @@
             color: #34a853 !important;
         }
 
+        /* Pin Button */
+        .gtt-btn-pin {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 2px 4px;
+            border-radius: 4px;
+            color: inherit;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            line-height: 1;
+            transition: color 0.15s ease;
+        }
+        .gtt-btn-pin:hover {
+            background: rgba(0,0,0,0.08);
+        }
+        .gtt-dark .gtt-btn-pin:hover {
+            background: rgba(255,255,255,0.12);
+        }
+        .gtt-btn-pin.gtt-pinned {
+            color: #1a73e8 !important;
+        }
+        .gtt-dark .gtt-btn-pin.gtt-pinned {
+            color: #8ab4f8 !important;
+        }
+
         /* Toggle Details Button */
         .gtt-toggle-details-btn {
             display: inline-flex;
@@ -484,6 +512,7 @@
     let hoverTimer = null;
     let isShowingSettings = false;
     let isDetailsExpanded = false;
+    let isPinned = false;
     let lastTtsClick = { text: '', lang: '', time: 0, isSlow: false };
     let currentAudio = null;
     let currentBlobUrl = null;
@@ -567,6 +596,8 @@
         if (iconBtn && iconBtn.contains(e.target)) return;
 
         removeIcon();
+        // Nếu popup đang được ghim, không tự đóng khi bấm ngoài
+        if (isPinned) return;
         removePopup();
     }
 
@@ -971,6 +1002,7 @@
                     <span>Google Translate</span>
                 </div>
                 <div class="gtt-header-actions">
+                    <button class="gtt-btn-pin ${isPinned ? 'gtt-pinned' : ''}" id="gtt-btn-pin" title="Ghim popup (không tự đóng khi bấm ngoài)">📌</button>
                     <button class="gtt-btn-icon" id="gtt-btn-settings" title="Cài đặt">⚙️</button>
                     <button class="gtt-btn-icon" id="gtt-btn-close" title="Đóng">✕</button>
                 </div>
@@ -982,8 +1014,16 @@
 
         document.body.appendChild(popupEl);
 
-        document.getElementById('gtt-btn-close').addEventListener('click', removePopup);
+        document.getElementById('gtt-btn-close').addEventListener('click', () => { isPinned = false; removePopup(); });
         document.getElementById('gtt-btn-settings').addEventListener('click', toggleSettings);
+        document.getElementById('gtt-btn-pin').addEventListener('click', () => {
+            isPinned = !isPinned;
+            const pinBtn = document.getElementById('gtt-btn-pin');
+            if (pinBtn) {
+                pinBtn.classList.toggle('gtt-pinned', isPinned);
+                pinBtn.title = isPinned ? 'Bỏ ghim (popup sẽ tự đóng khi bấm ngoài)' : 'Ghim popup (không tự đóng khi bấm ngoài)';
+            }
+        });
 
         enableDrag(popupEl, document.getElementById('gtt-drag-handle'));
     }
