@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.2.18
+// @version      1.2.19
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -51,7 +51,7 @@
         aiEndpoint: 'https://api.openai.com/v1/chat/completions',
         aiModel: '',
         aiApiKey: '',
-        aiPrompt: 'For each item, return its text unchanged and accurate IPA for the specified language. Use the source text only as context. Return JSON: {"items":[{"text":"...","ipa":"..."}]}. No extra text.',
+        aiPrompt: 'For each item, provide IPA for its text in the item language. The source is context only. Preserve each item id. Return only JSON: {"items":[{"id":"...","ipa":"..."}]}. Include every item.',
         delay: 0                   // ms độ trễ trước khi dịch lúc rê chuột vào icon
     };
 
@@ -1452,15 +1452,15 @@
             const limit = parseInt(getConfig('ipaWordLimit'), 10) || 5;
             const itemsToCheck = [
                 { id: '#gtt-ipa-src', text: currentSelectedText, lang: detectedLang, hasPron: Boolean(srcPronounce), source: true },
-                { id: '#gtt-ipa-tgt0', text: fullTranslatedText, lang: getConfig('to'), hasPron: Boolean(tgtPronounce) }
+                { id: '#gtt-ipa-tgt0', text: fullTranslatedText, lang: getConfig('to'), hasPron: Boolean(tgtPronounce), source: false }
             ];
             if (results[1]) {
                 const text2 = results[1][0] ? results[1][0].map(item => item[0]).filter(Boolean).join('') : '';
-                itemsToCheck.push({ id: '#gtt-ipa-tgt1', text: text2, lang: getConfig('to2'), hasPron: Boolean(pron2) });
+                itemsToCheck.push({ id: '#gtt-ipa-tgt1', text: text2, lang: getConfig('to2'), hasPron: Boolean(pron2), source: false });
             }
             if (results[2]) {
                 const text3 = results[2][0] ? results[2][0].map(item => item[0]).filter(Boolean).join('') : '';
-                itemsToCheck.push({ id: '#gtt-ipa-tgt2', text: text3, lang: getConfig('to3'), hasPron: Boolean(pron3) });
+                itemsToCheck.push({ id: '#gtt-ipa-tgt2', text: text3, lang: getConfig('to3'), hasPron: Boolean(pron3), source: false });
             }
 
             itemsToCheck.forEach(item => {
@@ -1481,10 +1481,10 @@
             });
 
             if (getConfig('aiIpa')) {
-                const aiItems = itemsToCheck.filter(item => !item.source && item.lang && item.lang !== 'auto' && item.text && countWords(item.text) <= limit);
-                fetchAiIpa(aiItems.map(item => ({ text: item.text, language: item.lang })), currentSelectedText, detectedLang).then(results => {
+                const aiItems = itemsToCheck.filter(item => !item.source && item.lang && item.lang !== 'Disabled' && item.text);
+                fetchAiIpa(aiItems.map(item => ({ id: item.id, text: item.text, language: item.lang })), currentSelectedText, detectedLang).then(results => {
                     results.forEach((result, index) => {
-                        const item = aiItems.find(candidate => candidate.text === result.text && candidate.lang === result.language) || aiItems[index];
+                        const item = aiItems.find(candidate => candidate.id === result.id) || aiItems[index];
                         if (!item || typeof result.ipa !== 'string' || !result.ipa.trim() || !popupEl) return;
                         const target = popupEl.querySelector(item.id);
                         if (target) { target.textContent = `/${result.ipa.trim().replace(/^\/+|\/+$/g, '')}/`; target.style.display = 'block'; }
