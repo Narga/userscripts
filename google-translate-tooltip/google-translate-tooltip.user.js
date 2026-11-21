@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.2.22
+// @version      1.2.23
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -541,6 +541,7 @@
     // STATE & DOM NODES
     // ============================================================
     let currentSelectedText = '';
+    let lastAiExchange = 'Chưa có request AI.';
     let iconBtn = null;
     let popupEl = null;
     let hoverTimer = null;
@@ -1085,21 +1086,23 @@
             ],
             response_format: { type: 'json_object' }
         };
+        lastAiExchange = JSON.stringify({ request: payload, response: 'Đang chờ phản hồi…' }, null, 2);
 
         return new Promise(resolve => GM_xmlhttpRequest({
             method: 'POST', url: endpoint, timeout: 20000,
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
             data: JSON.stringify(payload),
             onload: response => {
+                lastAiExchange = JSON.stringify({ request: payload, status: response.status, response: response.responseText }, null, 2);
                 try {
-                    if (response.status < 200 || response.status >= 300) return resolve([]);
+                    if (response.status < 200 || response.status >= 300) return resolve({});
                     const content = JSON.parse(response.responseText).choices?.[0]?.message?.content;
                     const parsed = typeof content === 'string' ? JSON.parse(content) : content;
                     resolve(parsed && typeof parsed === 'object' ? parsed : {});
-                } catch (_) { resolve([]); }
+                } catch (error) { lastAiExchange += `\n\nParse error: ${error.message}`; resolve({}); }
             },
-            onerror: () => resolve([]),
-            ontimeout: () => resolve([])
+            onerror: error => { lastAiExchange = JSON.stringify({ request: payload, error: String(error) }, null, 2); resolve({}); },
+            ontimeout: () => { lastAiExchange = JSON.stringify({ request: payload, error: 'Request timeout' }, null, 2); resolve({}); }
         }));
     }
 
@@ -1629,7 +1632,8 @@
                 <div class="gtt-field-row"><label>OpenAI API endpoint:</label><input type="text" id="gtt-set-ai-endpoint" value="${escapeHtml(getConfig('aiEndpoint'))}" style="width:220px;"/></div>
                 <div class="gtt-field-row"><label>Model:</label><select id="gtt-set-ai-model" style="max-width:210px;"><option value="${escapeHtml(getConfig('aiModel'))}">${escapeHtml(getConfig('aiModel') || 'Tải model để chọn')}</option></select><button type="button" id="gtt-btn-load-models" class="gtt-btn-secondary" title="Tải danh sách model">↻</button><span id="gtt-model-status" style="font-size:11px;"></span></div>
                 <div class="gtt-field-row"><label>API key:</label><input type="password" id="gtt-set-ai-key" value="${escapeHtml(getConfig('aiApiKey'))}" autocomplete="off" style="width:180px;"/></div>
-                <div class="gtt-field-row"><label>Prompt:</label><textarea id="gtt-set-ai-prompt" rows="3" style="width:100%;">${escapeHtml(getConfig('aiPrompt'))}</textarea></div>
+                <div class="gtt-field-row"><label>Prompt:</label><div style="width:100%;"><textarea id="gtt-set-ai-prompt" rows="4" style="width:100%;">${escapeHtml(getConfig('aiPrompt'))}</textarea><button type="button" id="gtt-btn-reset-ai-prompt" class="gtt-btn-secondary" style="margin-top:4px;">Prompt mặc định</button></div></div>
+                <div class="gtt-field-row"><label>Request/response AI gần nhất:</label><textarea id="gtt-ai-debug" rows="8" readonly style="width:100%;font-family:monospace;font-size:10px;">${escapeHtml(lastAiExchange)}</textarea><button type="button" id="gtt-btn-refresh-ai-debug" class="gtt-btn-secondary">Tải lại</button></div>
 
                 <div class="gtt-settings-footer">
                     <button class="gtt-btn-secondary" id="gtt-btn-cancel">Hủy</button>
@@ -1648,6 +1652,12 @@
         });
         document.getElementById('gtt-btn-clear-hotkey').addEventListener('click', () => {
             hotkeyInput.value = '';
+        });
+        document.getElementById('gtt-btn-reset-ai-prompt').addEventListener('click', () => {
+            document.getElementById('gtt-set-ai-prompt').value = DEFAULT_CONFIG.aiPrompt;
+        });
+        document.getElementById('gtt-btn-refresh-ai-debug').addEventListener('click', () => {
+            document.getElementById('gtt-ai-debug').value = lastAiExchange;
         });
 
         document.getElementById('gtt-btn-load-models').addEventListener('click', () => {
