@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.2.6
+// @version      1.2.7
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -670,8 +670,67 @@
     // dt=t (bản dịch), dt=bd (từ điển), dt=rm (phiên âm romaji/pinyin/latin),
     // dt=at (bản dịch thay thế), dt=md (định nghĩa), dt=ss (từ đồng nghĩa)
     // ============================================================
+    const TRANSLATION_CACHE_KEY = 'gtt_translation_cache_v1';
+    const MAX_TRANSLATION_CACHE_ENTRIES = 120;
+
+    function getTranslationCache() {
+        try {
+            const stored = GM_getValue(TRANSLATION_CACHE_KEY, {});
+            if (typeof stored === 'string') {
+                const parsed = JSON.parse(stored);
+                return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+            }
+            return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
+        } catch (_) {
+            return {};
+        }
+    }
+
+    function getTranslationCacheKey(text, sl, tl) {
+        return `${sl}->${tl}:${String(text).trim().toLowerCase()}`;
+    }
+
+    function getCachedTranslation(text, sl, tl) {
+        try {
+            const cache = getTranslationCache();
+            const key = getTranslationCacheKey(text, sl, tl);
+            const entry = cache[key];
+            if (!entry || !Array.isArray(entry.data)) return null;
+
+            entry.timestamp = Date.now();
+            GM_setValue(TRANSLATION_CACHE_KEY, cache);
+            return entry.data;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function saveTranslationToCache(text, sl, tl, data) {
+        if (!Array.isArray(data)) return;
+        try {
+            const cache = getTranslationCache();
+            const key = getTranslationCacheKey(text, sl, tl);
+            cache[key] = { data, timestamp: Date.now() };
+
+            const keys = Object.keys(cache);
+            keys.sort((a, b) => (cache[a].timestamp || 0) - (cache[b].timestamp || 0));
+            while (keys.length > MAX_TRANSLATION_CACHE_ENTRIES) {
+                delete cache[keys.shift()];
+            }
+            GM_setValue(TRANSLATION_CACHE_KEY, cache);
+        } catch (_) {}
+    }
+
     function fetchTranslation(text, sl, tl) {
         return new Promise((resolve, reject) => {
+            const resolveWithCacheOrReject = (error) => {
+                const cached = getCachedTranslation(text, sl, tl);
+                if (cached) {
+                    resolve(cached);
+                } else {
+                    reject(error);
+                }
+            };
             const encodedText = encodeURIComponent(text);
             const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&dt=bd&dt=rm&dt=at&dt=md&dt=ss&q=${encodedText}`;
 
@@ -686,16 +745,17 @@
                     if (response.status >= 200 && response.status < 300) {
                         try {
                             const data = JSON.parse(response.responseText);
+                            saveTranslationToCache(text, sl, tl, data);
                             resolve(data);
                         } catch (err) {
-                            reject(err);
+                            resolveWithCacheOrReject(err);
                         }
                     } else {
-                        reject(new Error(`HTTP error ${response.status}`));
+                        resolveWithCacheOrReject(new Error(`HTTP error ${response.status}`));
                     }
                 },
-                ontimeout: () => reject(new Error('Hết thời gian chờ (Timeout 5s)')),
-                onerror: (err) => reject(err)
+                ontimeout: () => resolveWithCacheOrReject(new Error('Hết thời gian chờ (Timeout 5s)')),
+                onerror: (err) => resolveWithCacheOrReject(err)
             });
         });
     }
