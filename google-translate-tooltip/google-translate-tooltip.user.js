@@ -1279,6 +1279,7 @@
         }
 
         const targetDetails = [
+            { id: 'src', text: currentSelectedText, lang: detectedLang, source: true },
             { id: 'tgt0', text: fullTranslatedText, lang: getConfig('to') },
             ...(results[1] ? [{ id: 'tgt1', text: results[1][0]?.map(item => item[0]).filter(Boolean).join('') || '', lang: getConfig('to2') }] : []),
             ...(results[2] ? [{ id: 'tgt2', text: results[2][0]?.map(item => item[0]).filter(Boolean).join('') || '', lang: getConfig('to3') }] : [])
@@ -1291,7 +1292,7 @@
         const showRelatedWords = countWords(currentSelectedText) === 1
             && String(detectedLang).toLowerCase().startsWith('en');
 
-        detailsHtml += `<div class="gtt-ai-details-controls" style="margin:0 0 8px;padding-bottom:6px;border-bottom:1px dashed var(--gtt-border,#dadce0);">${targetDetails.map(item => `<button class="gtt-btn-secondary" data-ai-detail-id="${item.id}" data-ai-detail-text="${escapeHtml(item.text)}" data-ai-detail-lang="${escapeHtml(item.lang)}" style="margin-right:4px;">${escapeHtml(item.lang)}</button>`).join('')}<div id="gtt-ai-details-result"></div></div>`;
+        detailsHtml += `<div class="gtt-ai-details-controls" style="margin:0 0 6px;text-align:right;"><div role="tablist" style="display:flex;justify-content:flex-end;gap:4px;">${targetDetails.map((item, index) => `<button type="button" role="tab" aria-selected="false" class="gtt-btn-secondary" data-ai-detail-id="${item.id}" data-ai-detail-text="${escapeHtml(item.text)}" data-ai-detail-lang="${escapeHtml(item.lang)}" style="padding:2px 7px;${index === 0 ? 'opacity:.8;' : ''}">${escapeHtml(item.lang)}</button>`).join('')}</div><div id="gtt-ai-details-result" role="tabpanel" style="display:none;text-align:left;"></div></div>`;
 
         if (hasGrammar || hasAlternatives || hasDefinitions) {
             // Nhóm từ loại & nghĩa tương đương (Grammar)
@@ -1398,11 +1399,17 @@
         bodyEl.innerHTML = html;
 
         bodyEl.querySelectorAll('[data-ai-detail-id]').forEach(button => button.addEventListener('click', async () => {
+            bodyEl.querySelectorAll('[data-ai-detail-id]').forEach(tab => {
+                tab.setAttribute('aria-selected', String(tab === button));
+                tab.style.background = tab === button ? '#1a73e8' : '';
+                tab.style.color = tab === button ? '#fff' : '';
+            });
             const lang = button.dataset.aiDetailLang;
             const text = button.dataset.aiDetailText;
             const cache = getAiDetailsCache();
             const key = `${lang}:${text.trim().toLowerCase()}`;
             const result = bodyEl.querySelector('#gtt-ai-details-result');
+            result.style.display = 'block';
             const renderDetail = value => {
                 let data = value;
                 if (typeof value === 'string') {
