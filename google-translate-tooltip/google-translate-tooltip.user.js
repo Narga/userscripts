@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.3.0
+// @version      1.3.2
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -52,6 +52,7 @@
         aiModel: '',
         aiApiKey: '',
         aiDebug: false,
+        aiDetailsPrompt: 'Explain the translated text in its target language. Return concise structured details as JSON with fields: meaning, usage, examples. The source text is context only.',
         aiPrompt: 'The sourceLanguage field identifies the original language. For each target, use its own language field. Return only a JSON object keyed by the supplied ids, with IPA strings as values, e.g. {"gtt-ipa-src":"/aɪ/","gtt-ipa-tgt0":"/aʊt/","gtt-ipa-tgt1":"/aʊs/","gtt-ipa-tgt2":"/fɔn/"}. Include each supplied id; omit ids not supplied.',
         delay: 0                   // ms độ trễ trước khi dịch lúc rê chuột vào icon
     };
@@ -680,6 +681,13 @@
     // ============================================================
     const TRANSLATION_CACHE_KEY = 'gtt_translation_cache_v1';
     const MAX_TRANSLATION_CACHE_ENTRIES = 120;
+    const AI_DETAILS_CACHE_KEY = 'gtt_ai_details_v1';
+    const MAX_AI_DETAILS_CACHE_ENTRIES = 300;
+
+    function getAiDetailsCache() {
+        try { const cache = GM_getValue(AI_DETAILS_CACHE_KEY, {}); return cache && typeof cache === 'object' ? cache : {}; }
+        catch (_) { return {}; }
+    }
 
     function getTranslationCache() {
         try {
@@ -1270,6 +1278,11 @@
             `;
         }
 
+        const targetDetails = [
+            { id: 'tgt0', text: fullTranslatedText, lang: getConfig('to') },
+            ...(results[1] ? [{ id: 'tgt1', text: results[1][0]?.map(item => item[0]).filter(Boolean).join('') || '', lang: getConfig('to2') }] : []),
+            ...(results[2] ? [{ id: 'tgt2', text: results[2][0]?.map(item => item[0]).filter(Boolean).join('') || '', lang: getConfig('to3') }] : [])
+        ].filter(item => item.text && item.lang && item.lang !== 'Disabled');
         // 5. XÂY DỰNG NỘI DUNG CHI TIẾT (Details): Từ loại, Bản dịch thay thế, Định nghĩa & Từ đồng nghĩa
         let detailsHtml = '';
         const hasGrammar = Array.isArray(mainData[1]) && mainData[1].length > 0;
@@ -1363,6 +1376,8 @@
             detailsHtml += '</div>';
         }
 
+        detailsHtml += `<div class="gtt-ai-details-controls" style="margin-top:10px;border-top:1px dashed var(--gtt-border,#dadce0);padding-top:6px;">${targetDetails.map(item => `<button class="gtt-btn-secondary" data-ai-detail-id="${item.id}" data-ai-detail-text="${escapeHtml(item.text)}" data-ai-detail-lang="${escapeHtml(item.lang)}" style="margin-right:4px;">${escapeHtml(item.lang)}</button>`).join('')}<div id="gtt-ai-details-result"></div></div>`;
+
         // Tích hợp toggle chi tiết
         if (detailsHtml) {
             const hideDefault = getConfig('hideDetailsDefault');
@@ -1381,6 +1396,47 @@
         }
 
         bodyEl.innerHTML = html;
+
+        bodyEl.querySelectorAll('[data-ai-detail-id]').forEach(button => button.addEventListener('click', async () => {
+            const lang = button.dataset.aiDetailLang;
+            const text = button.dataset.aiDetailText;
+            const cache = getAiDetailsCache();
+            const key = `${lang}:${text.trim().toLowerCase()}`;
+            const result = bodyEl.querySelector('#gtt-ai-details-result');
+            const renderDetail = value => {
+                let data = value;
+                if (typeof value === 'string') {
+                    try { data = JSON.parse(value); } catch (_) { data = { meaning: value }; }
+                }
+                if (!data || typeof data !== 'object') data = { meaning: String(data || '') };
+                const examples = Array.isArray(data.examples) ? data.examples : [];
+                result.innerHTML = `<div class="gtt-section-title">${escapeHtml(lang)} — ${escapeHtml(text)}</div>${data.meaning ? `<div class="gtt-dict-terms"><strong>Nghĩa:</strong> ${escapeHtml(data.meaning)}</div>` : ''}${data.usage ? `<div class="gtt-dict-terms"><strong>Cách dùng:</strong> ${escapeHtml(data.usage)}</div>` : ''}${examples.length ? `<div class="gtt-dict-terms"><strong>Ví dụ:</strong><ul>${examples.map(example => `<li>${escapeHtml(example)}</li>`).join('')}</ul></div>` : ''}`;
+            };
+            if (cache[key]) { renderDetail(cache[key].data); return; }
+            result.textContent = 'Đang tải chi tiết…';
+            const endpoint = String(getConfig('aiEndpoint') || '').trim();
+            const model = String(getConfig('aiModel') || '').trim();
+            const apiKey = String(getConfig('aiApiKey') || '').trim();
+            if (!endpoint || !model || !apiKey) { result.textContent = 'Cần cấu hình endpoint, model và API key.'; return; }
+            const payload = { model, temperature: 0, messages: [
+                { role: 'system', content: getConfig('aiDetailsPrompt') || DEFAULT_CONFIG.aiDetailsPrompt },
+                { role: 'user', content: JSON.stringify({ source: currentSelectedText, sourceLanguage: detectedLang, target: text, targetLanguage: lang }) }
+            ], response_format: { type: 'json_object' } };
+            GM_xmlhttpRequest({ method: 'POST', url: endpoint, timeout: 20000, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, data: JSON.stringify(payload),
+                onload: response => {
+                    try {
+                        if (response.status < 200 || response.status >= 300) throw new Error(`HTTP ${response.status}: ${response.responseText.slice(0, 250)}`);
+                        const content = JSON.parse(response.responseText).choices?.[0]?.message?.content;
+                        const data = typeof content === 'string' ? JSON.parse(content) : content;
+                        cache[key] = { data, timestamp: Date.now() };
+                        const keys = Object.keys(cache).sort((a, b) => cache[a].timestamp - cache[b].timestamp);
+                        while (keys.length > MAX_AI_DETAILS_CACHE_ENTRIES) delete cache[keys.shift()];
+                        GM_setValue(AI_DETAILS_CACHE_KEY, cache);
+                        renderDetail(data);
+                    } catch (error) { result.textContent = error.message; }
+                }, onerror: () => { result.textContent = 'Lỗi kết nối AI'; }, ontimeout: () => { result.textContent = 'AI request timeout'; }
+            });
+        }));
 
         if (showRelatedWords) {
             const lookupPopup = popupEl;
