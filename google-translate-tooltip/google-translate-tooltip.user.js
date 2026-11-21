@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.2.5
+// @version      1.2.6
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -220,6 +220,21 @@
             border-radius: 3px;
             margin-right: 6px;
             display: inline-block;
+        }
+        .gtt-reverse-btn {
+            background: none;
+            border: none;
+            color: #5f6368;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            padding: 1px 4px;
+            border-radius: 3px;
+            margin-left: 2px;
+        }
+        .gtt-reverse-btn:hover {
+            background: rgba(26, 115, 232, 0.1);
+            color: #1a73e8;
         }
         .gtt-dark .gtt-lang-tag {
             background: #394457;
@@ -1082,6 +1097,7 @@
             <div class="gtt-translation-row">
                 <span class="gtt-lang-tag">${escapeHtml(getConfig('to'))}</span>
                 <span class="gtt-trans-text">${escapeHtml(fullTranslatedText)}</span>
+                ${fullTranslatedText ? '<button class="gtt-reverse-btn" id="gtt-btn-reverse" title="Đảo chiều dịch">🔄</button>' : ''}
                 ${getConfig('tts') ? `<button class="gtt-tts-btn" data-tts-text="${escapeHtml(fullTranslatedText)}" data-tts-lang="${escapeHtml(getConfig('to'))}" title="Phát âm (Bấm lần 2 để đọc chậm)">${SPEAKER_ICON_SVG}</button>` : ''}
                 <button class="gtt-copy-btn" data-copy-text="${escapeHtml(fullTranslatedText)}" title="Sao chép">${COPY_ICON_SVG}</button>
                 <span class="gtt-ipa-subline" id="gtt-ipa-tgt0" style="${allowIpa && tgtPronounce ? 'display:block;' : 'display:none;'}">${tgtPronounce ? `/${escapeHtml(tgtPronounce)}/` : ''}</span>
@@ -1213,6 +1229,19 @@
         }
 
         bodyEl.innerHTML = html;
+
+        const reverseBtn = bodyEl.querySelector('#gtt-btn-reverse');
+        if (reverseBtn) {
+            reverseBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const targetLang = getConfig('to');
+                const sourceLang = detectedLang && detectedLang !== 'auto' ? detectedLang : 'en';
+                setConfig('from', targetLang);
+                setConfig('to', sourceLang);
+                currentSelectedText = fullTranslatedText;
+                startLookup(parseInt(popupEl.style.left, 10), parseInt(popupEl.style.top, 10));
+            });
+        }
 
         // Gắn sự kiện phát âm: Bấm lần 1 tốc độ chuẩn, bấm lần 2 liên tiếp phát chậm theo mức cấu hình
         bodyEl.querySelectorAll('.gtt-tts-btn').forEach(btn => {
