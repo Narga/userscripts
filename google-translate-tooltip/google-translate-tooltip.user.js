@@ -658,14 +658,15 @@
         if (!clean) return '';
         // Datamuse & FreeDictionary chỉ hỗ trợ tiếng Anh — bỏ qua các ngôn ngữ khác
         if (lang !== 'en') return '';
-        if (ipaCache.has(clean)) return ipaCache.get(clean);
+        const cacheKey = `${lang}:${clean}`;
+        if (ipaCache.has(cacheKey)) return ipaCache.get(cacheKey);
 
         let ipa = await fetchDatamuseSingle(clean);
         if (!ipa) {
             ipa = await fetchFreeDictSingle(clean);
         }
         if (ipa) {
-            ipaCache.set(clean, ipa);
+            ipaCache.set(cacheKey, ipa);
         }
         return ipa;
     }
@@ -675,11 +676,11 @@
         if (lang !== 'en') return '';
         const clean = text.toLowerCase().replace(/[^\w\s'-]/g, '').trim();
         if (!clean) return '';
-        if (ipaCache.has(clean)) return ipaCache.get(clean);
+        const cacheKey = `${lang}:${clean}`;
+        if (ipaCache.has(cacheKey)) return ipaCache.get(cacheKey);
 
         let ipa = '';
         if (clean.includes(' ')) {
-            // Đối với câu hoặc cụm từ: tra cứu riêng từng từ để các từ được tách rời rõ ràng bằng khoảng trắng
             const words = clean.split(/\s+/).filter(Boolean);
             if (words.length <= parseInt(getConfig('ipaWordLimit'), 10)) {
                 const parts = await Promise.all(words.map(async w => {
@@ -695,7 +696,7 @@
         }
 
         if (ipa) {
-            ipaCache.set(clean, ipa);
+            ipaCache.set(cacheKey, ipa);
         }
         return ipa || '';
     }
