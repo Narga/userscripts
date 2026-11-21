@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.2.13
+// @version      1.2.14
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -865,38 +865,32 @@
         });
     }
 
-    async function fetchWordIpa(word, lang = '') {
+    async function fetchWordIpa(word) {
         const clean = word.toLowerCase().trim();
         if (!clean) return '';
-        // Datamuse & FreeDictionary chỉ hỗ trợ tiếng Anh — bỏ qua các ngôn ngữ khác
-        if (String(lang).toLowerCase() !== 'en') return '';
-        const cacheKey = `${lang}:${clean}`;
-        if (ipaCache.has(cacheKey)) return ipaCache.get(cacheKey);
+        if (ipaCache.has(clean)) return ipaCache.get(clean);
 
         let ipa = await fetchDatamuseSingle(clean);
         if (!ipa) {
             ipa = await fetchFreeDictSingle(clean);
         }
         if (ipa) {
-            ipaCache.set(cacheKey, ipa);
+            ipaCache.set(clean, ipa);
         }
         return ipa;
     }
 
-    async function getPhoneticIpa(text, lang = '') {
-        // Chỉ tra cứu IPA bên ngoài nếu ngôn ngữ là tiếng Anh
-        if (String(lang).toLowerCase() !== 'en') return '';
+    async function getPhoneticIpa(text) {
         const clean = text.toLowerCase().replace(/[^\w\s'-]/g, '').trim();
         if (!clean) return '';
-        const cacheKey = `${lang}:${clean}`;
-        if (ipaCache.has(cacheKey)) return ipaCache.get(cacheKey);
+        if (ipaCache.has(clean)) return ipaCache.get(clean);
 
         let ipa = '';
         if (clean.includes(' ')) {
             const words = clean.split(/\s+/).filter(Boolean);
             if (words.length <= parseInt(getConfig('ipaWordLimit'), 10)) {
                 const parts = await Promise.all(words.map(async w => {
-                    const wIpa = await fetchWordIpa(w, lang);
+                    const wIpa = await fetchWordIpa(w);
                     return wIpa || w;
                 }));
                 if (parts.some((p, idx) => p !== words[idx])) {
@@ -904,11 +898,11 @@
                 }
             }
         } else {
-            ipa = await fetchWordIpa(clean, lang);
+            ipa = await fetchWordIpa(clean);
         }
 
         if (ipa) {
-            ipaCache.set(cacheKey, ipa);
+            ipaCache.set(clean, ipa);
         }
         return ipa || '';
     }
@@ -1067,30 +1061,6 @@
 
         visit(data && data[13]);
         return examples.slice(0, 3);
-    }
-
-    // Fallback: gọi Google riêng để lấy phiên âm (dt=rm) khi extractPhonetics trả rỗng
-    function fetchGooglePhonetics(text, sl, tl) {
-        return new Promise((resolve) => {
-            const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=rm&dt=t&q=${encodeURIComponent(text)}`;
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: url,
-                timeout: 3000,
-                headers: { 'Accept': 'application/json' },
-                onload: (resp) => {
-                    if (resp.status >= 200 && resp.status < 300) {
-                        try {
-                            const data = JSON.parse(resp.responseText);
-                            const tgtPron = extractPhonetics(data, false);
-                            resolve(tgtPron || '');
-                        } catch (_) { resolve(''); }
-                    } else { resolve(''); }
-                },
-                ontimeout: () => resolve(''),
-                onerror: () => resolve('')
-            });
-        });
     }
 
     // ============================================================
@@ -1442,29 +1412,24 @@
         if (allowIpa) {
             const limit = parseInt(getConfig('ipaWordLimit'), 10) || 5;
             const itemsToCheck = [
-                { id: '#gtt-ipa-src', text: currentSelectedText, lang: detectedLang, hasPron: Boolean(srcPronounce), isSource: true },
-                { id: '#gtt-ipa-tgt0', text: fullTranslatedText, lang: getConfig('to'), hasPron: Boolean(tgtPronounce), isSource: false }
+                { id: '#gtt-ipa-src', text: currentSelectedText, lang: detectedLang, hasPron: Boolean(srcPronounce) },
+                { id: '#gtt-ipa-tgt0', text: fullTranslatedText, lang: getConfig('to'), hasPron: Boolean(tgtPronounce) }
             ];
             if (results[1]) {
                 const text2 = results[1][0] ? results[1][0].map(item => item[0]).filter(Boolean).join('') : '';
-                itemsToCheck.push({ id: '#gtt-ipa-tgt1', text: text2, lang: getConfig('to2'), hasPron: Boolean(pron2), isSource: false });
+                itemsToCheck.push({ id: '#gtt-ipa-tgt1', text: text2, lang: getConfig('to2'), hasPron: Boolean(pron2) });
             }
             if (results[2]) {
                 const text3 = results[2][0] ? results[2][0].map(item => item[0]).filter(Boolean).join('') : '';
-                itemsToCheck.push({ id: '#gtt-ipa-tgt2', text: text3, lang: getConfig('to3'), hasPron: Boolean(pron3), isSource: false });
+                itemsToCheck.push({ id: '#gtt-ipa-tgt2', text: text3, lang: getConfig('to3'), hasPron: Boolean(pron3) });
             }
 
             itemsToCheck.forEach(item => {
-                if (!item.text || item.hasPron || countWords(item.text) > limit) return;
+                if (!item.text || item.hasPron || item.lang !== 'en' || countWords(item.text) > limit) return;
                 const el = bodyEl.querySelector(item.id);
                 if (!el) return;
 
-                // Tiếng Anh: dùng Datamuse/FreeDictionary; các ngôn ngữ khác: fallback Google dt=rm
-                const ipaPromise = (item.lang === 'en')
-                    ? getPhoneticIpa(item.text, item.lang)
-                    : fetchGooglePhonetics(item.text, item.lang, item.lang);
-
-                ipaPromise.then(ipa => {
+                getPhoneticIpa(item.text).then(ipa => {
                     if (ipa && popupEl) {
                         const targetEl = popupEl.querySelector(item.id);
                         if (targetEl) {
