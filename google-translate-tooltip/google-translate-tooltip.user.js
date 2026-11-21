@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.2.4
+// @version      1.2.5
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -83,6 +83,18 @@
         { code: 'sv', name: 'Swedish' },
         { code: 'tr', name: 'Turkish' }
     ];
+
+    function getLanguageName(code) {
+        const normalized = String(code || '').trim();
+        if (!normalized || normalized.toLowerCase() === 'auto') return 'Phát hiện tự động';
+
+        const exact = LANGUAGES.find(lang => lang.code.toLowerCase() === normalized.toLowerCase());
+        if (exact) return exact.name;
+
+        const baseCode = normalized.split('-')[0].toLowerCase();
+        const base = LANGUAGES.find(lang => lang.code.split('-')[0].toLowerCase() === baseCode);
+        return base ? base.name : normalized.toUpperCase();
+    }
 
     // ============================================================
     // STYLES (Scoped CSS)
@@ -1057,7 +1069,7 @@
         // 1. DÒNG VĂN BẢN GỐC (có nút phát âm, sao chép và phiên âm gốc)
         html += `
             <div class="gtt-source-row">
-                <span class="gtt-lang-tag">${escapeHtml(detectedLang)}</span>
+                <span class="gtt-lang-tag" title="Mã ngôn ngữ: ${escapeHtml(detectedLang)}">${escapeHtml(getLanguageName(detectedLang))}</span>
                 <span class="gtt-orig-text">${escapeHtml(currentSelectedText)}</span>
                 ${getConfig('tts') ? `<button class="gtt-tts-btn" data-tts-text="${escapeHtml(currentSelectedText)}" data-tts-lang="${escapeHtml(detectedLang)}" title="Phát âm (Bấm lần 2 để đọc chậm)">${SPEAKER_ICON_SVG}</button>` : ''}
                 <button class="gtt-copy-btn" data-copy-text="${escapeHtml(currentSelectedText)}" title="Sao chép">${COPY_ICON_SVG}</button>
