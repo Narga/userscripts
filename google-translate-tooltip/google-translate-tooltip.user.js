@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.3.2
+// @version      1.3.3
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -52,7 +52,7 @@
         aiModel: '',
         aiApiKey: '',
         aiDebug: false,
-        aiDetailsPrompt: 'Explain the translated text in its target language. Return concise structured details as JSON with fields: meaning, usage, examples. The source text is context only.',
+        aiDetailsPrompt: 'Create dictionary-style details for the translated expression in its target language. Use the source expression only to resolve meaning. Return JSON: {"partOfSpeech":[{"name":"...","translations":["..."]}],"definitions":[{"partOfSpeech":"...","items":[{"text":"...","synonyms":["..."]}]}],"relatedWords":["..."],"antonyms":["..."],"examples":[{"text":"...","translation":"..."}]}. Include several distinct senses when applicable; do not invent uncertain details. Write all explanations and examples naturally in the target language.',
         aiPrompt: 'The sourceLanguage field identifies the original language. For each target, use its own language field. Return only a JSON object keyed by the supplied ids, with IPA strings as values, e.g. {"gtt-ipa-src":"/aɪ/","gtt-ipa-tgt0":"/aʊt/","gtt-ipa-tgt1":"/aʊs/","gtt-ipa-tgt2":"/fɔn/"}. Include each supplied id; omit ids not supplied.',
         delay: 0                   // ms độ trễ trước khi dịch lúc rê chuột vào icon
     };
@@ -1291,6 +1291,8 @@
         const showRelatedWords = countWords(currentSelectedText) === 1
             && String(detectedLang).toLowerCase().startsWith('en');
 
+        detailsHtml += `<div class="gtt-ai-details-controls" style="margin:0 0 8px;padding-bottom:6px;border-bottom:1px dashed var(--gtt-border,#dadce0);">${targetDetails.map(item => `<button class="gtt-btn-secondary" data-ai-detail-id="${item.id}" data-ai-detail-text="${escapeHtml(item.text)}" data-ai-detail-lang="${escapeHtml(item.lang)}" style="margin-right:4px;">${escapeHtml(item.lang)}</button>`).join('')}<div id="gtt-ai-details-result"></div></div>`;
+
         if (hasGrammar || hasAlternatives || hasDefinitions) {
             // Nhóm từ loại & nghĩa tương đương (Grammar)
             if (hasGrammar) {
@@ -1376,8 +1378,6 @@
             detailsHtml += '</div>';
         }
 
-        detailsHtml += `<div class="gtt-ai-details-controls" style="margin-top:10px;border-top:1px dashed var(--gtt-border,#dadce0);padding-top:6px;">${targetDetails.map(item => `<button class="gtt-btn-secondary" data-ai-detail-id="${item.id}" data-ai-detail-text="${escapeHtml(item.text)}" data-ai-detail-lang="${escapeHtml(item.lang)}" style="margin-right:4px;">${escapeHtml(item.lang)}</button>`).join('')}<div id="gtt-ai-details-result"></div></div>`;
-
         // Tích hợp toggle chi tiết
         if (detailsHtml) {
             const hideDefault = getConfig('hideDetailsDefault');
@@ -1410,7 +1410,23 @@
                 }
                 if (!data || typeof data !== 'object') data = { meaning: String(data || '') };
                 const examples = Array.isArray(data.examples) ? data.examples : [];
-                result.innerHTML = `<div class="gtt-section-title">${escapeHtml(lang)} — ${escapeHtml(text)}</div>${data.meaning ? `<div class="gtt-dict-terms"><strong>Nghĩa:</strong> ${escapeHtml(data.meaning)}</div>` : ''}${data.usage ? `<div class="gtt-dict-terms"><strong>Cách dùng:</strong> ${escapeHtml(data.usage)}</div>` : ''}${examples.length ? `<div class="gtt-dict-terms"><strong>Ví dụ:</strong><ul>${examples.map(example => `<li>${escapeHtml(example)}</li>`).join('')}</ul></div>` : ''}`;
+                let markup = `<div class="gtt-section-title">${escapeHtml(lang)} — ${escapeHtml(text)}</div>`;
+                (data.partOfSpeech || []).forEach(group => {
+                    markup += `<div class="gtt-dict-pos">${escapeHtml(group.name || '')}</div><div class="gtt-dict-terms">${escapeHtml((group.translations || []).join(', '))}</div>`;
+                });
+                if (data.meaning) markup += `<div class="gtt-dict-terms"><strong>Nghĩa:</strong> ${escapeHtml(data.meaning)}</div>`;
+                if (data.usage) markup += `<div class="gtt-dict-terms"><strong>Cách dùng:</strong> ${escapeHtml(data.usage)}</div>`;
+                (data.definitions || []).forEach(group => {
+                    markup += `<div class="gtt-dict-pos">${escapeHtml(group.partOfSpeech || '')}</div>`;
+                    (group.items || []).forEach(item => {
+                        markup += `<div class="gtt-dict-terms">- ${escapeHtml(item.text || '')}</div>`;
+                        if (item.synonyms?.length) markup += `<div class="gtt-synonym-tag">Đồng nghĩa: ${escapeHtml(item.synonyms.join(', '))}</div>`;
+                    });
+                });
+                if (data.relatedWords?.length) markup += `<div class="gtt-dict-terms"><strong>Từ liên quan:</strong> ${escapeHtml(data.relatedWords.join(', '))}</div>`;
+                if (data.antonyms?.length) markup += `<div class="gtt-dict-terms"><strong>Trái nghĩa:</strong> ${escapeHtml(data.antonyms.join(', '))}</div>`;
+                if (examples.length) markup += `<div class="gtt-section-title">Ví dụ câu</div>${examples.map(example => `<div class="gtt-dict-terms" style="font-style:italic;">${escapeHtml(typeof example === 'string' ? example : example.text || '')}${example.translation ? `<br>${escapeHtml(example.translation)}` : ''}</div>`).join('')}`;
+                result.innerHTML = markup;
             };
             if (cache[key]) { renderDetail(cache[key].data); return; }
             result.textContent = 'Đang tải chi tiết…';
@@ -1689,7 +1705,7 @@
                 <div class="gtt-field-row"><label>OpenAI API endpoint:</label><input type="text" id="gtt-set-ai-endpoint" value="${escapeHtml(getConfig('aiEndpoint'))}" style="width:220px;"/></div>
                 <div class="gtt-field-row"><label>Model:</label><button type="button" id="gtt-btn-load-models" class="gtt-btn-secondary" title="Tải danh sách model">↻</button><select id="gtt-set-ai-model" style="max-width:210px;margin-left:auto;text-align:right;"><option value="${escapeHtml(getConfig('aiModel'))}">${escapeHtml(getConfig('aiModel') || 'Tải model để chọn')}</option></select><span id="gtt-model-status" style="font-size:11px;"></span></div>
                 <div class="gtt-field-row"><label>API key:</label><input type="password" id="gtt-set-ai-key" value="${escapeHtml(getConfig('aiApiKey'))}" autocomplete="off" style="width:180px;"/></div>
-                <div class="gtt-field-row" style="display:block;"><div style="display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-bottom:4px;"><button type="button" id="gtt-btn-reset-ai-prompt" class="gtt-btn-secondary">Prompt mặc định</button><label>Prompt:</label></div><textarea id="gtt-set-ai-prompt" rows="4" style="width:100%;">${escapeHtml(getConfig('aiPrompt'))}</textarea></div>
+                <div class="gtt-field-row" style="display:block;"><div style="display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-bottom:4px;"><button type="button" id="gtt-btn-reset-ai-prompt" class="gtt-btn-secondary" title="Khôi phục prompt mặc định">↻</button><label>Prompt:</label></div><textarea id="gtt-set-ai-prompt" rows="4" style="width:100%;">${escapeHtml(getConfig('aiPrompt'))}</textarea></div>
                 <div class="gtt-field-row" style="display:block;"><div style="display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-bottom:4px;"><button type="button" id="gtt-btn-refresh-ai-debug" class="gtt-btn-secondary">Tải lại</button><label>Request/response AI gần nhất:</label><label style="margin-left:auto;"><input type="checkbox" id="gtt-set-ai-debug" ${getConfig('aiDebug') ? 'checked' : ''}/> Debug</label></div><textarea id="gtt-ai-debug" rows="8" readonly style="width:100%;font-family:monospace;font-size:10px;display:${getConfig('aiDebug') ? 'block' : 'none'};">${escapeHtml(lastAiExchange)}</textarea></div>
 
                 <div class="gtt-settings-footer">
