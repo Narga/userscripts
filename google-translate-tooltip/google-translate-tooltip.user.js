@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.2.7
+// @version      1.2.8
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -799,6 +799,40 @@
         });
     }
 
+    function fetchDatamuseRelation(clean, relation) {
+        return new Promise((resolve) => {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: `https://api.datamuse.com/words?${relation}=${encodeURIComponent(clean)}&max=6`,
+                timeout: 3000,
+                headers: { 'Accept': 'application/json' },
+                onload: (resp) => {
+                    if (resp.status === 200) {
+                        try {
+                            const items = JSON.parse(resp.responseText);
+                            if (Array.isArray(items)) {
+                                resolve([...new Set(items
+                                    .map(item => item && item.word)
+                                    .filter(word => word && word.toLowerCase() !== clean.toLowerCase()))].slice(0, 5));
+                                return;
+                            }
+                        } catch (_) {}
+                    }
+                    resolve([]);
+                },
+                ontimeout: () => resolve([]),
+                onerror: () => resolve([])
+            });
+        });
+    }
+
+    function fetchRelatedWords(clean) {
+        return Promise.all([
+            fetchDatamuseRelation(clean, 'rel_syn'),
+            fetchDatamuseRelation(clean, 'rel_ant')
+        ]).then(([synonyms, antonyms]) => ({ synonyms, antonyms }));
+    }
+
     function fetchFreeDictSingle(clean) {
         return new Promise((resolve) => {
             GM_xmlhttpRequest({
@@ -1203,6 +1237,8 @@
         const hasGrammar = Array.isArray(mainData[1]) && mainData[1].length > 0;
         const hasAlternatives = getConfig('showAlternatives') && Array.isArray(mainData[5]) && mainData[5].length > 0;
         const hasDefinitions = Array.isArray(mainData[12]) && mainData[12].length > 0;
+        const showRelatedWords = countWords(currentSelectedText) === 1
+            && String(detectedLang).toLowerCase().startsWith('en');
 
         if (hasGrammar || hasAlternatives || hasDefinitions) {
             // Nhóm từ loại & nghĩa tương đương (Grammar)
@@ -1271,6 +1307,15 @@
             }
         }
 
+        if (showRelatedWords) {
+            detailsHtml += `
+                <div class="gtt-related-block" id="gtt-related-words">
+                    <div class="gtt-section-title">Từ liên quan & Trái nghĩa</div>
+                    <div style="color:#5f6368;font-size:12px;">Đang tải...</div>
+                </div>
+            `;
+        }
+
         // Tích hợp toggle chi tiết
         if (detailsHtml) {
             const hideDefault = getConfig('hideDetailsDefault');
@@ -1289,6 +1334,24 @@
         }
 
         bodyEl.innerHTML = html;
+
+        if (showRelatedWords) {
+            const lookupPopup = popupEl;
+            fetchRelatedWords(currentSelectedText.trim().toLowerCase()).then(({ synonyms, antonyms }) => {
+                if (popupEl !== lookupPopup) return;
+                const relatedEl = popupEl.querySelector('#gtt-related-words');
+                if (!relatedEl) return;
+                if (!synonyms.length && !antonyms.length) {
+                    relatedEl.remove();
+                    return;
+                }
+                relatedEl.innerHTML = `
+                    <div class="gtt-section-title">Từ liên quan & Trái nghĩa</div>
+                    ${synonyms.length ? `<div class="gtt-dict-terms"><strong>Đồng nghĩa:</strong> ${escapeHtml(synonyms.join(', '))}</div>` : ''}
+                    ${antonyms.length ? `<div class="gtt-dict-terms"><strong>Trái nghĩa:</strong> ${escapeHtml(antonyms.join(', '))}</div>` : ''}
+                `;
+            });
+        }
 
         const reverseBtn = bodyEl.querySelector('#gtt-btn-reverse');
         if (reverseBtn) {
