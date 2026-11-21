@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.2.16
+// @version      1.2.17
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -1626,7 +1626,7 @@
                     <label><input type="checkbox" id="gtt-set-ai-ipa" ${getConfig('aiIpa') ? 'checked' : ''}/> Dùng AI bổ sung IPA</label>
                 </div>
                 <div class="gtt-field-row"><label>OpenAI API endpoint:</label><input type="text" id="gtt-set-ai-endpoint" value="${escapeHtml(getConfig('aiEndpoint'))}" style="width:220px;"/></div>
-                <div class="gtt-field-row"><label>Model:</label><input type="text" id="gtt-set-ai-model" value="${escapeHtml(getConfig('aiModel'))}" style="width:140px;"/></div>
+                <div class="gtt-field-row"><label>Model:</label><select id="gtt-set-ai-model" style="max-width:210px;"><option value="${escapeHtml(getConfig('aiModel'))}">${escapeHtml(getConfig('aiModel') || 'Tải model để chọn')}</option></select><button type="button" id="gtt-btn-load-models" class="gtt-btn-secondary" title="Tải danh sách model">↻</button><span id="gtt-model-status" style="font-size:11px;"></span></div>
                 <div class="gtt-field-row"><label>API key:</label><input type="password" id="gtt-set-ai-key" value="${escapeHtml(getConfig('aiApiKey'))}" autocomplete="off" style="width:180px;"/></div>
                 <div class="gtt-field-row"><label>Prompt:</label><textarea id="gtt-set-ai-prompt" rows="3" style="width:100%;">${escapeHtml(getConfig('aiPrompt'))}</textarea></div>
 
@@ -1647,6 +1647,33 @@
         });
         document.getElementById('gtt-btn-clear-hotkey').addEventListener('click', () => {
             hotkeyInput.value = '';
+        });
+
+        document.getElementById('gtt-btn-load-models').addEventListener('click', () => {
+            const endpoint = document.getElementById('gtt-set-ai-endpoint').value.trim().replace(/\/+$/, '').replace(/\/chat\/completions$/, '');
+            const apiKey = document.getElementById('gtt-set-ai-key').value.trim();
+            const modelSelect = document.getElementById('gtt-set-ai-model');
+            const status = document.getElementById('gtt-model-status');
+            if (!endpoint || !apiKey) { status.textContent = 'Nhập endpoint và API key trước'; return; }
+            status.textContent = 'Đang tải…';
+            GM_xmlhttpRequest({
+                method: 'GET', url: `${endpoint}/models`, timeout: 15000,
+                headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
+                onload: response => {
+                    try {
+                        if (response.status < 200 || response.status >= 300) throw new Error(`HTTP ${response.status}`);
+                        const models = JSON.parse(response.responseText).data;
+                        if (!Array.isArray(models)) throw new Error('Phản hồi không có danh sách model');
+                        const selected = modelSelect.value;
+                        modelSelect.replaceChildren(...models.filter(model => model && model.id).map(model => new Option(model.id, model.id)));
+                        if (selected && !models.some(model => model.id === selected)) modelSelect.add(new Option(selected, selected));
+                        if (selected) modelSelect.value = selected;
+                        status.textContent = models.length ? `${models.length} model` : 'Không có model';
+                    } catch (error) { status.textContent = error.message || 'Không tải được model'; }
+                },
+                onerror: () => { status.textContent = 'Lỗi kết nối'; },
+                ontimeout: () => { status.textContent = 'Hết thời gian chờ'; }
+            });
         });
 
         document.getElementById('gtt-btn-cancel').addEventListener('click', () => {
