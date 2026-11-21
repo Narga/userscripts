@@ -273,6 +273,36 @@
             100% { transform: scale(1); }
         }
 
+        /* Copy Button */
+        .gtt-copy-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 1px 4px;
+            vertical-align: middle;
+            color: #5f6368;
+            display: inline-flex;
+            align-items: center;
+            border-radius: 3px;
+            margin-left: 2px;
+            transition: color 0.15s ease, background 0.15s ease;
+            font-size: 12px;
+        }
+        .gtt-copy-btn:hover {
+            color: #1a73e8;
+            background: rgba(26,115,232,0.1);
+        }
+        .gtt-dark .gtt-copy-btn {
+            color: #9aa0a6;
+        }
+        .gtt-dark .gtt-copy-btn:hover {
+            color: #8ab4f8;
+            background: rgba(138,180,248,0.15);
+        }
+        .gtt-copy-btn.gtt-copied {
+            color: #34a853 !important;
+        }
+
         /* Toggle Details Button */
         .gtt-toggle-details-btn {
             display: inline-flex;
@@ -415,6 +445,35 @@
 
     const GOOGLE_ICON_SVG = `<svg viewBox="0 0 24 24"><path d="M12.87 15.07l-2.54-2.51.03-.08c1.77-1.97 3.05-4.24 3.79-6.62H17V4h-6V2h-2v2H3v1.85h8.33c-.7 2.01-1.8 3.93-3.23 5.58-.94-1.07-1.74-2.28-2.37-3.58l-1.73.71c.77 1.59 1.76 3.07 2.92 4.38L2.09 21.7 3.5 23.1l6.83-6.83 3.54 3.54 1.41-1.41-2.41-2.41-.01-.01zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/></svg>`;
     const SPEAKER_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
+    const COPY_ICON_SVG = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>`;
+
+    function copyToClipboard(text, btn) {
+        navigator.clipboard.writeText(text).then(() => {
+            btn.classList.add('gtt-copied');
+            const origHTML = btn.innerHTML;
+            btn.innerHTML = '✓';
+            setTimeout(() => {
+                btn.classList.remove('gtt-copied');
+                btn.innerHTML = origHTML;
+            }, 1200);
+        }).catch(() => {
+            // Fallback cho trình duyệt không hỗ trợ clipboard API
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.cssText = 'position:fixed;left:-9999px;';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            btn.classList.add('gtt-copied');
+            const origHTML = btn.innerHTML;
+            btn.innerHTML = '✓';
+            setTimeout(() => {
+                btn.classList.remove('gtt-copied');
+                btn.innerHTML = origHTML;
+            }, 1200);
+        });
+    }
 
     // ============================================================
     // STATE & DOM NODES
@@ -954,22 +1013,24 @@
 
         let html = '';
 
-        // 1. DÒNG VĂN BẢN GỐC (có nút phát âm và phiên âm gốc)
+        // 1. DÒNG VĂN BẢN GỐC (có nút phát âm, sao chép và phiên âm gốc)
         html += `
             <div class="gtt-source-row">
                 <span class="gtt-lang-tag">${escapeHtml(detectedLang)}</span>
                 <span class="gtt-orig-text">${escapeHtml(currentSelectedText)}</span>
                 ${getConfig('tts') ? `<button class="gtt-tts-btn" data-tts-text="${escapeHtml(currentSelectedText)}" data-tts-lang="${escapeHtml(detectedLang)}" title="Phát âm (Bấm lần 2 để đọc chậm)">${SPEAKER_ICON_SVG}</button>` : ''}
+                <button class="gtt-copy-btn" data-copy-text="${escapeHtml(currentSelectedText)}" title="Sao chép">${COPY_ICON_SVG}</button>
                 <span class="gtt-ipa-subline" id="gtt-ipa-src" style="${allowIpa && srcPronounce ? 'display:block;' : 'display:none;'}">${srcPronounce ? `/${escapeHtml(srcPronounce)}/` : ''}</span>
             </div>
         `;
 
-        // 2. BẢN DỊCH CHÍNH (có nút phát âm và phiên âm bản dịch)
+        // 2. BẢN DỊCH CHÍNH (có nút phát âm, sao chép và phiên âm bản dịch)
         html += `
             <div class="gtt-translation-row">
                 <span class="gtt-lang-tag">${escapeHtml(getConfig('to'))}</span>
                 <span class="gtt-trans-text">${escapeHtml(fullTranslatedText)}</span>
                 ${getConfig('tts') ? `<button class="gtt-tts-btn" data-tts-text="${escapeHtml(fullTranslatedText)}" data-tts-lang="${escapeHtml(getConfig('to'))}" title="Phát âm (Bấm lần 2 để đọc chậm)">${SPEAKER_ICON_SVG}</button>` : ''}
+                <button class="gtt-copy-btn" data-copy-text="${escapeHtml(fullTranslatedText)}" title="Sao chép">${COPY_ICON_SVG}</button>
                 <span class="gtt-ipa-subline" id="gtt-ipa-tgt0" style="${allowIpa && tgtPronounce ? 'display:block;' : 'display:none;'}">${tgtPronounce ? `/${escapeHtml(tgtPronounce)}/` : ''}</span>
             </div>
         `;
@@ -985,6 +1046,7 @@
                     <span class="gtt-lang-tag">${escapeHtml(getConfig('to2'))}</span>
                     <span class="gtt-trans-text">${escapeHtml(text2)}</span>
                     ${getConfig('tts') ? `<button class="gtt-tts-btn" data-tts-text="${escapeHtml(text2)}" data-tts-lang="${escapeHtml(getConfig('to2'))}" title="Phát âm (Bấm lần 2 để đọc chậm)">${SPEAKER_ICON_SVG}</button>` : ''}
+                    <button class="gtt-copy-btn" data-copy-text="${escapeHtml(text2)}" title="Sao chép">${COPY_ICON_SVG}</button>
                     <span class="gtt-ipa-subline" id="gtt-ipa-tgt1" style="${allowIpa && pron2 ? 'display:block;' : 'display:none;'}">${pron2 ? `/${escapeHtml(pron2)}/` : ''}</span>
                 </div>
             `;
@@ -1001,6 +1063,7 @@
                     <span class="gtt-lang-tag">${escapeHtml(getConfig('to3'))}</span>
                     <span class="gtt-trans-text">${escapeHtml(text3)}</span>
                     ${getConfig('tts') ? `<button class="gtt-tts-btn" data-tts-text="${escapeHtml(text3)}" data-tts-lang="${escapeHtml(getConfig('to3'))}" title="Phát âm (Bấm lần 2 để đọc chậm)">${SPEAKER_ICON_SVG}</button>` : ''}
+                    <button class="gtt-copy-btn" data-copy-text="${escapeHtml(text3)}" title="Sao chép">${COPY_ICON_SVG}</button>
                     <span class="gtt-ipa-subline" id="gtt-ipa-tgt2" style="${allowIpa && pron3 ? 'display:block;' : 'display:none;'}">${pron3 ? `/${escapeHtml(pron3)}/` : ''}</span>
                 </div>
             `;
@@ -1124,6 +1187,15 @@
                 playTTS(text, lang, isSlow, () => {
                     btn.classList.remove('gtt-playing', 'gtt-playing-slow');
                 });
+            });
+        });
+
+        // Gắn sự kiện sao chép nhanh cho tất cả nút copy
+        bodyEl.querySelectorAll('.gtt-copy-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const text = btn.getAttribute('data-copy-text');
+                if (text) copyToClipboard(text, btn);
             });
         });
 
