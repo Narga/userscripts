@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Translate Tooltip
 // @namespace    CustomScripts
-// @version      1.3.4
+// @version      1.3.5
 // @description  Display instant Google translation, pronunciation/phonetics, synonyms, and text-to-speech tooltip when selecting text
 // @author       narga
 // @homepage     https://github.com/narga
@@ -1292,7 +1292,7 @@
         const showRelatedWords = countWords(currentSelectedText) === 1
             && String(detectedLang).toLowerCase().startsWith('en');
 
-        detailsHtml += `<div class="gtt-ai-details-controls" style="margin:0 0 6px;text-align:right;"><div role="tablist" style="display:flex;justify-content:flex-end;gap:4px;">${targetDetails.map((item, index) => `<button type="button" role="tab" aria-selected="false" class="gtt-btn-secondary" data-ai-detail-id="${item.id}" data-ai-detail-text="${escapeHtml(item.text)}" data-ai-detail-lang="${escapeHtml(item.lang)}" style="padding:2px 7px;${index === 0 ? 'opacity:.8;' : ''}">${escapeHtml(item.lang)}</button>`).join('')}</div><div id="gtt-ai-details-result" role="tabpanel" style="display:none;text-align:left;"></div></div>`;
+        detailsHtml += `<div class="gtt-ai-details-controls" style="margin:0 0 6px;text-align:right;"><div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;"><button type="button" id="gtt-ai-details-retry" class="gtt-btn-secondary" title="Gửi lại yêu cầu AI">↻</button><div role="tablist" style="display:flex;justify-content:flex-end;gap:4px;">${targetDetails.map((item, index) => `<button type="button" role="tab" aria-selected="false" class="gtt-btn-secondary" data-ai-detail-id="${item.id}" data-ai-detail-text="${escapeHtml(item.text)}" data-ai-detail-lang="${escapeHtml(item.lang)}" style="padding:2px 7px;${index === 0 ? 'opacity:.8;' : ''}">${escapeHtml(item.lang)}</button>`).join('')}</div></div><div id="gtt-ai-details-result" role="tabpanel" style="display:none;text-align:left;"></div></div>`;
 
         if (hasGrammar || hasAlternatives || hasDefinitions) {
             // Nhóm từ loại & nghĩa tương đương (Grammar)
@@ -1460,6 +1460,15 @@
                 }, onerror: () => { result.textContent = 'Lỗi kết nối AI'; }, ontimeout: () => { result.textContent = 'AI request timeout'; }
             });
         }));
+        bodyEl.querySelector('#gtt-ai-details-retry')?.addEventListener('click', () => {
+            const activeTab = bodyEl.querySelector('[data-ai-detail-id][aria-selected="true"]');
+            if (!activeTab) return;
+            const key = `${activeTab.dataset.aiDetailLang}:${activeTab.dataset.aiDetailText.trim().toLowerCase()}`;
+            const cache = getAiDetailsCache();
+            delete cache[key];
+            GM_setValue(AI_DETAILS_CACHE_KEY, cache);
+            activeTab.click();
+        });
 
         if (showRelatedWords) {
             const lookupPopup = popupEl;
